@@ -1,0 +1,25 @@
+name: fMSX Linux build and slot regression
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  linux-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build stock fMSX libretro core (no Pico firmware required)
+        run: make --jobs=2 platform=unix
+      - name: Compile pure slot selection tests
+        run: gcc -std=c11 -Wall -Wextra -Werror -IfMSX tests/test_slot_logic.c -o /tmp/fmsx-test-slots
+      - name: Run slot selection tests
+        run: /tmp/fmsx-test-slots
+      - name: Exercise actual fMSX memory reads and writes at FFFFh
+        run: python3 tests/smoke_slots.py fmsx_libretro.so
+      - name: Inspect shared-library dependencies
+        run: ldd -r fmsx_libretro.so

@@ -14,6 +14,7 @@
 /*************************************************************/
 
 #include "MSX.h"
+#include "SlotLogic.h"
 #ifdef MSXPICO_FMSX
 #include "MSXPicoBus.h"
 #endif
@@ -964,96 +965,114 @@ int ResetMSX(int NewMode,int NewRAMPages,int NewVRAMPages)
 /** address A in the Z80 address space. Also see OpZ80() in **/
 /** Z80.c which is a simplified code-only RdZ80() version.  **/
 /*************************************************************/
-uint8_t RdZ80(uint16_t A)
+uint8_t RdZ80(uint16_t address)
 {
 #ifdef MSXPICO_FMSX
-  uint8_t pico_value;
-  if(msxpico_fmsx_mem_read(A,&pico_value)) return pico_value;
+  uint8_t picoValue;
+  if (msxpico_fmsx_mem_read(address, &picoValue))
+    return picoValue;
 #endif
-  uint8_t J,PS,SS,I;
 
-  /* Secondary slot selector */
-  if(A==0xFFFF /*&& ((PSL[3]==0 && !MODEL(MSX_MSX1)) || PSL[3]==3)*/) return(~SSLReg[PSL[3]]); // might be wrong - should only read back inverse when the primary slot is expanded. Commented code would fix that.
+  const unsigned page = address >> 14;
+  const uint8_t primarySlot = PSL[page];
+  const uint8_t secondarySlot = SSL[page];
 
-  J  = A>>14;           /* 16kB page number 0-3  */
-  PS = PSL[J];          /* Primary slot number   */
-  SS = SSL[J];          /* Secondary slot number */
+  /* FFFFh selects secondary slots only when the page-3 slot is expanded.
+   * Otherwise this is an ordinary read from the currently mapped memory.
+   * See openMSX MSXCPUInterface::readMemSlow(). */
+  if (MSXSecondarySlotRegisterVisible(address, primarySlot, MODEL(MSX_MSX1)))
+    return (uint8_t)~SSLReg[primarySlot];
 
-  /* Floppy disk controller */
-  /* 7FF8h..7FFFh Standard DiskROM  */
-  /* BFF8h..BFFFh MSX-DOS BDOS      */
-  /* 7F80h..7F87h Arabic DiskROM    */
-  /* 7FB8h..7FBFh SV738/TechnoAhead */
-  if(PS==3&&SS==1)
-    switch(A)
-    {
-      /* Standard      MSX-DOS       Arabic        SV738            */
-      case 0x7FF8: case 0xBFF8: case 0x7F80: case 0x7FB8: /* STATUS */
-      case 0x7FF9: case 0xBFF9: case 0x7F81: case 0x7FB9: /* TRACK  */
-      case 0x7FFA: case 0xBFFA: case 0x7F82: case 0x7FBA: /* SECTOR */
-      case 0x7FFB: case 0xBFFB: case 0x7F83: case 0x7FBB: /* DATA   */
-        return(Read1793(&FDC,A&0x0003));
-      case 0x7FFF: case 0xBFFF: case 0x7F84: case 0x7FBC: /* SYSTEM */
-        return(Read1793(&FDC,WD1793_READY));
-    }
-
-  I = CartMap[PS][SS]; /* Cartridge number      */
-  if(I<2 && SCCOn[I] && ((A&0xD800)==0x9800))
+  /* Disk-ROM memory-mapped FDC. */
+  if ((primarySlot == 3) && (secondarySlot == 1))
   {
-    J=A&0x00FF;
-    return (A&0x2000) ? ReadSCCP(&SCChip,J) : ReadSCC(&SCChip,J);
+    switch (address)
+    {
+      /* Standard   MSX-DOS      Arabic       SV738 */
+      case 0x7FF8: case 0xBFF8: case 0x7F80: case 0x7FB8: /* STATUS */
+      case 0x7FF9: case 0xBFF9: case 0x7F81: case 0x7FB9: /* TRACK */
+      case 0x7FFA: case 0xBFFA: case 0x7F82: case 0x7FBA: /* SECTOR */
+      case 0x7FFB: case 0xBFFB: case 0x7F83: case 0x7FBB: /* DATA */
+        return Read1793(&FDC, address & 0x0003);
+      case 0x7FFF: case 0xBFFF: case 0x7F84: case 0x7FBC: /* SYSTEM */
+        return Read1793(&FDC, WD1793_READY);
+      default:
+        break;
+    }
   }
 
-  /* Default to reading memory */
-  return(RAM[A>>13][A&0x1FFF]);
+  const uint8_t cartridgeIndex = CartMap[primarySlot][secondarySlot];
+  if ((cartridgeIndex < 2) && SCCOn[cartridgeIndex] &&
+      ((address & 0xD800) == 0x9800))
+  {
+    const uint8_t sccRegister = (uint8_t)address;
+    return (address & 0x2000)
+        ? ReadSCCP(&SCChip, sccRegister)
+        : ReadSCC(&SCChip, sccRegister);
+  }
+
+  return RAM[address >> 13][address & 0x1FFF];
 }
 
 /** WrZ80() **************************************************/
 /** Z80 emulation calls this function to write uint8_t V to    **/
 /** address A of Z80 address space.                         **/
 /*************************************************************/
-void WrZ80(uint16_t A,uint8_t V)
+void WrZ80(uint16_t address, uint8_t value)
 {
 #ifdef MSXPICO_FMSX
-  if(msxpico_fmsx_mem_write(A,V)) return;
+  if (msxpico_fmsx_mem_write(address, value))
+    return;
 #endif
-  /* Secondary slot selector */
-  if(A==0xFFFF) { SSlot(V);return; }
 
-  /* Floppy disk controller */
-  /* 7FF8h..7FFFh Standard DiskROM  */
-  /* BFF8h..BFFFh MSX-DOS BDOS      */
-  /* 7F80h..7F87h Arabic DiskROM    */
-  /* 7FB8h..7FBFh SV738/TechnoAhead */
-  if(((A&0x3F88)==0x3F88)&&(PSL[A>>14]==3)&&(SSL[A>>14]==1))
-    switch(A)
+  const unsigned page = address >> 14;
+
+  /* FFFFh is a register only in an expanded primary slot. In other
+   * slots (for instance cartridge slot 1/2), it is normal memory. */
+  if (MSXSecondarySlotRegisterVisible(address, PSL[3], MODEL(MSX_MSX1)))
+  {
+    SSlot(value);
+    return;
+  }
+
+  /* Memory-mapped floppy-disk controller. */
+  if (((address & 0x3F88) == 0x3F88) &&
+      (PSL[page] == 3) && (SSL[page] == 1))
+  {
+    switch (address)
     {
-      /* Standard      MSX-DOS       Arabic        SV738             */
+      /* Standard   MSX-DOS       Arabic       SV738 */
       case 0x7FF8: case 0xBFF8: case 0x7F80: case 0x7FB8: /* COMMAND */
-      case 0x7FF9: case 0xBFF9: case 0x7F81: case 0x7FB9: /* TRACK   */
-      case 0x7FFA: case 0xBFFA: case 0x7F82: case 0x7FBA: /* SECTOR  */
-      case 0x7FFB: case 0xBFFB: case 0x7F83: case 0x7FBB: /* DATA    */
-        Write1793(&FDC,A&0x0003,V);
+      case 0x7FF9: case 0xBFF9: case 0x7F81: case 0x7FB9: /* TRACK */
+      case 0x7FFA: case 0xBFFA: case 0x7F82: case 0x7FBA: /* SECTOR */
+      case 0x7FFB: case 0xBFFB: case 0x7F83: case 0x7FBB: /* DATA */
+        Write1793(&FDC, address & 0x0003, value);
         return;
-      case 0xBFFC: /* Standard/MSX-DOS */
-      case 0x7FFC: /* Side: [xxxxxxxS] */
-        Write1793(&FDC,WD1793_SYSTEM,FDC.Drive|S_DENSITY|(V&0x01? 0:S_SIDE));
+      case 0xBFFC: case 0x7FFC: /* Side: [xxxxxxxS] */
+        Write1793(&FDC, WD1793_SYSTEM,
+                  FDC.Drive | S_DENSITY | (value & 0x01 ? 0 : S_SIDE));
         return;
-      case 0xBFFD: /* Standard/MSX-DOS  */
-      case 0x7FFD: /* Drive: [xxxxxxxD] */
-        Write1793(&FDC,WD1793_SYSTEM,(V&0x01)|S_DENSITY|(FDC.Side? 0:S_SIDE));
+      case 0xBFFD: case 0x7FFD: /* Drive: [xxxxxxxD] */
+        Write1793(&FDC, WD1793_SYSTEM,
+                  (value & 0x01) | S_DENSITY | (FDC.Side ? 0 : S_SIDE));
         return;
-      case 0x7FBC: /* Arabic/SV738 */
-      case 0x7F84: /* Side/Drive/Motor: [xxxxMSDD] */
-        Write1793(&FDC,WD1793_SYSTEM,(V&0x03)|S_DENSITY|(V&0x04? 0:S_SIDE));
+      case 0x7FBC: case 0x7F84: /* Arabic/SV738: Side, Drive, Motor */
+        Write1793(&FDC, WD1793_SYSTEM,
+                  (value & 0x03) | S_DENSITY | (value & 0x04 ? 0 : S_SIDE));
         return;
+      default:
+        break;
     }
+  }
 
-  /* Write to RAM, if enabled */
-  if(EnWrite[A>>14]) { RAM[A>>13][A&0x1FFF]=V;return; }
+  if (EnWrite[page])
+  {
+    RAM[address >> 13][address & 0x1FFF] = value;
+    return;
+  }
 
-  /* Switch MegaROM pages */
-  if((A>0x3FFF)&&(A<0xC000)) MapROM(A,V);
+  if ((address >= 0x4000) && (address < 0xC000))
+    MapROM(address, value);
 }
 
 /** InZ80() **************************************************/
@@ -1745,47 +1764,64 @@ void MapROM(uint16_t A,uint8_t V)
 /** Switch primary memory slots. This function is called    **/
 /** when value in port A8h changes.                         **/
 /*************************************************************/
-void PSlot(uint8_t V)
+void PSlot(uint8_t primarySlotRegister)
 {
-  uint8_t J,I;
+  if (PSLReg == primarySlotRegister)
+    return;
 
-  if(PSLReg!=V)
-    for(PSLReg=V,J=0;J<4;++J,V>>=2)
-    {
-      I          = J<<1;
-      PSL[J]     = V&3;
-      SSL[J]     = (SSLReg[PSL[J]]>>I)&3;
-      RAM[I]     = MemMap[PSL[J]][SSL[J]][I];
-      RAM[I+1]   = MemMap[PSL[J]][SSL[J]][I+1];
-      EnWrite[J] = (PSL[J]==3)&&(SSL[J]==2)&&(MemMap[3][2][I]!=EmptyRAM);
-    }
+  PSLReg = primarySlotRegister;
+
+  for (unsigned page = 0; page < 4; ++page)
+  {
+    const unsigned halfPageIndex = page * 2;
+    const uint8_t primarySlot =
+        (uint8_t)((primarySlotRegister >> halfPageIndex) & 3);
+    const uint8_t secondarySlot =
+        (uint8_t)((SSLReg[primarySlot] >> halfPageIndex) & 3);
+
+    PSL[page] = primarySlot;
+    SSL[page] = secondarySlot;
+    RAM[halfPageIndex] = MemMap[primarySlot][secondarySlot][halfPageIndex];
+    RAM[halfPageIndex + 1] =
+        MemMap[primarySlot][secondarySlot][halfPageIndex + 1];
+    EnWrite[page] = (primarySlot == 3) && (secondarySlot == 2) &&
+                    (MemMap[3][2][halfPageIndex] != EmptyRAM);
+  }
 }
 
 /** SSlot() **************************************************/
 /** Switch secondary memory slots. This function is called  **/
 /** when value in (FFFFh) changes.                          **/
 /*************************************************************/
-void SSlot(uint8_t V)
+void SSlot(uint8_t secondarySlotRegister)
 {
-  uint8_t J,I;
+  const uint8_t selectedPrimarySlot = PSL[3];
 
-  /* Cartridge slots do not have subslots, fix them at 0:0:0:0 */
-  if((PSL[3]==1)||(PSL[3]==2)) V=0x00;
-  /* In MSX1, slot 0 does not have subslots either */
-  if(!PSL[3]&&((Mode&MSX_MODEL)==MSX_MSX1)) V=0x00;
+  /* Unexpanded slots do not implement the secondary-slot register. */
+  if (!MSXSlotIsExpanded(selectedPrimarySlot, MODEL(MSX_MSX1)))
+    return;
+  if (SSLReg[selectedPrimarySlot] == secondarySlotRegister)
+    return;
 
-  if(SSLReg[PSL[3]]!=V)
-    for(SSLReg[PSL[3]]=V,J=0;J<4;++J,V>>=2)
-    {
-      if(PSL[J]==PSL[3])
-      {
-        I          = J<<1;
-        SSL[J]     = V&3;
-        RAM[I]     = MemMap[PSL[J]][SSL[J]][I];
-        RAM[I+1]   = MemMap[PSL[J]][SSL[J]][I+1];
-        EnWrite[J] = (PSL[J]==3)&&(SSL[J]==2)&&(MemMap[3][2][I]!=EmptyRAM);
-      }
-    }
+  SSLReg[selectedPrimarySlot] = secondarySlotRegister;
+
+  for (unsigned page = 0; page < 4; ++page)
+  {
+    const unsigned halfPageIndex = page * 2;
+    if (PSL[page] != selectedPrimarySlot)
+      continue;
+
+    const uint8_t secondarySlot =
+        (uint8_t)((secondarySlotRegister >> halfPageIndex) & 3);
+    SSL[page] = secondarySlot;
+    RAM[halfPageIndex] =
+        MemMap[selectedPrimarySlot][secondarySlot][halfPageIndex];
+    RAM[halfPageIndex + 1] =
+        MemMap[selectedPrimarySlot][secondarySlot][halfPageIndex + 1];
+    EnWrite[page] = (selectedPrimarySlot == 3) &&
+                    (secondarySlot == 2) &&
+                    (MemMap[3][2][halfPageIndex] != EmptyRAM);
+  }
 }
 
 /** SetIRQ() *************************************************/

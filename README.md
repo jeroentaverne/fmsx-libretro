@@ -651,3 +651,21 @@ a blocking condition variable between bus events and a monotonic 50/60 Hz
 frame pacer while attached. No BIOS or full MSX Pico firmware boot has yet
 been demonstrated. Only the normal-ROM and ASCII8 mapper loops are connected;
 Core 0 and other hardware emulation remain future work.
+
+## Slot accuracy and formatting
+
+The expanded-secondary-slot register at `FFFFh` is now accessible only when
+the selected primary slot is expanded. This follows the same principle used by
+openMSX's `MSXCPUInterface::readMemSlow` and `writeMemSlow`.
+
+In this fMSX hardware model, primary slot 3 is expanded on MSX1/MSX2, while
+primary slot 0 is expanded on MSX2/MSX2+ but not on MSX1. Cartridge primary
+slots 1 and 2 are unexpanded. On unexpanded slots, `FFFFh` behaves like
+normal mapped memory, including ordinary RAM writes if write-enabled.
+
+The Z80 memory callback and slot-select functions have meaningful local
+variable names, consistent two-space indentation, and explicit branches.
+The public fMSX callback names and state format remain unchanged. A
+`.clang-format` profile documents the style for subsequent maintenance.
+`tests/test_slot_logic.c` covers the slot rules; `tests/smoke_slots.py`
+checks real fMSX Z80 memory callbacks without needing proprietary BIOS ROMs.
