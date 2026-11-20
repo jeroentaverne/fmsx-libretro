@@ -29,12 +29,8 @@ SOURCES_C := \
 	$(EMULIB)/MCF.c \
 	$(LIBZ80)/Z80.c \
 	$(EMULIB)/I8255.c \
-	$(EMULIB)/YM2413.c \
 	$(EMULIB)/AY8910.c \
-	$(EMULIB)/SCC.c \
-	$(EMULIB)/WD1793.c \
-	$(NUKEYKT)/opll.c \
-	$(NUKEYKT)/WrapNukeYKT.c
+	$(EMULIB)/WD1793.c
 
 ifneq ($(STATIC_LINKING), 1)
 SOURCES_C += $(CORE_DIR)/libretro-common/file/retro_dirent.c \

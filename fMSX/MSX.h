@@ -17,9 +17,6 @@
 #include "Z80.h"          /* Z80 CPU emulation               */
 #include "V9938.h"        /* V9938 VDP opcode emulation      */
 #include "AY8910.h"       /* AY8910 PSG emulation            */
-#include "YM2413.h"       /* YM2413 OPLL emulation (simple)  */
-#include "../NukeYKT/WrapNukeYKT.h" /* YM2413 OPLL emulation (NukeYKT) */
-#include "SCC.h"          /* Konami SCC chip emulation       */
 #include "I8255.h"        /* Intel 8255 PPI emulation        */
 #include "WD1793.h"       /* WD1793 FDC emulation            */
 
@@ -113,10 +110,8 @@ void MSXRefreshCPUTiming(void);
 #define MAXCHEATS   256     /* Max number of cheats          */
 
 #define FIRST_AY8910_CHANNEL 0
-#define FIRST_YM2413_CHANNEL AY8910_CHANNELS
-#define FIRST_SCC_CHANNEL (AY8910_CHANNELS+YM2413_CHANNELS)
-/* Number of sound channels used by the emulation, except NukeYKT */
-#define MAXCHANNELS (AY8910_CHANNELS+YM2413_CHANNELS+SCC_CHANNELS)
+/* Pico owns SCC and YM2413; host keeps the six native PSG generators. */
+#define MAXCHANNELS AY8910_CHANNELS
 
 /** Model and options bits and macros ************************/
 #define MODEL(M)        ((Mode&MSX_MODEL)==(M))
@@ -158,13 +153,11 @@ void MSXRefreshCPUTiming(void);
 #define MSX_GUESSB    0x00020000 /* Guess ROM mapper type B  */
 
 #define MSX_OPTIONS    0x7FFC0000 /* Miscellaneous Options:   */
-#define MSX_NUKEYKT    0x00200000 /* YM2413 simple (0) or NukeYKT (1)  */
 #define MSX_GMASTER    0x00400000 /* Load Game Master 1/2     */
 #define MSX_ALLSPRITE  0x00800000 /* Show ALL sprites         */
 #define MSX_AUTOFIREA  0x01000000 /* Autofire joystick FIRE-A */
 #define MSX_AUTOFIREB  0x02000000 /* Autofire joystick FIRE-B */
 #define MSX_AUTOSPACE  0x04000000 /* Autofire SPACE button    */
-#define MSX_NO_MEGARAM 0x08000000 /* Disable SCC-I MegaRAM    */
 #define MSX_PATCHBDOS  0x10000000 /* Patch DiskROM routines   */
 #define MSX_FIXEDFONT  0x20000000 /* Use fixed 8x8 text font  */
 #define MSX_MSXDOS2    0x40000000 /* Load MSXDOS2 ROM on boot */

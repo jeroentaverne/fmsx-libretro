@@ -853,12 +853,6 @@ static void check_variables(void)
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value && strcmp(var.value, "Yes") == 0)
       Mode |= MSX_ALLSPRITE;
 
-   var.key = "fmsx_ym2413_core";
-   var.value = NULL;
-
-   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value && strcmp(var.value, "NukeYKT") == 0)
-      Mode |= MSX_NUKEYKT;
-
    RAMPages = 128; /* Fixed 2 MiB RAM, 128 x 16 KiB mapper banks. */
 
    var.key = "fmsx_vram_pages";
@@ -879,12 +873,6 @@ static void check_variables(void)
    }
    else
       VRAMPages = ModeVRAM;
-
-   var.key = "fmsx_scci_megaram";
-   var.value = NULL;
-
-   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value && strcmp(var.value, "No") == 0)
-      Mode |= MSX_NO_MEGARAM;
 
    var.key = "fmsx_log_level";
    var.value = NULL;
@@ -1492,8 +1480,6 @@ void retro_set_environment(retro_environment_t cb)
             "FMPAC"
       },
       { "fmsx_vram_pages", "MSX Video Memory; Auto|32KB|64KB|128KB|192KB" },
-      { "fmsx_scci_megaram", "Enable SCC-I 128kB MegaRAM; Yes|No" },
-      { "fmsx_ym2413_core", "YM2413 (FM-PAC / MSX-MUSIC) core; fMSX|NukeYKT" },
       { "fmsx_log_level", "fMSX logging; Off|Info|Debug|Spam" },
       { "fmsx_game_master", "Support Game Master; No|Yes" },
       { "fmsx_simbdos", "Simulate DiskROM disk access calls; No|Yes" },

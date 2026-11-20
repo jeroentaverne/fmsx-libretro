@@ -13,7 +13,6 @@
 #include "Sound.h"
 #include "MSX.h"
 
-#include "../NukeYKT/WrapNukeYKT.h"
 
 #include <string.h>
 
@@ -38,29 +37,7 @@ static struct
   int Pos;                        /* Wave current position in Data    */  
 
   int Count;                      /* Phase counter                    */
-} WaveCH[SND_CHANNELS] =
-{
-  { SND_MELODIC,0,0,0,0,0,0,0 },
-  { SND_MELODIC,0,0,0,0,0,0,0 },
-  { SND_MELODIC,0,0,0,0,0,0,0 },
-  { SND_MELODIC,0,0,0,0,0,0,0 },
-  { SND_MELODIC,0,0,0,0,0,0,0 },
-  { SND_MELODIC,0,0,0,0,0,0,0 },
-  { SND_MELODIC,0,0,0,0,0,0,0 },
-  { SND_MELODIC,0,0,0,0,0,0,0 },
-  { SND_MELODIC,0,0,0,0,0,0,0 },
-  { SND_MELODIC,0,0,0,0,0,0,0 },
-  { SND_MELODIC,0,0,0,0,0,0,0 },
-  { SND_MELODIC,0,0,0,0,0,0,0 },
-  { SND_MELODIC,0,0,0,0,0,0,0 },
-  { SND_MELODIC,0,0,0,0,0,0,0 },
-  { SND_MELODIC,0,0,0,0,0,0,0 },
-  { SND_MELODIC,0,0,0,0,0,0,0 },
-  { SND_MELODIC,0,0,0,0,0,0,0 },
-  { SND_MELODIC,0,0,0,0,0,0,0 },
-  { SND_MELODIC,0,0,0,0,0,0,0 },
-  { SND_MELODIC,0,0,0,0,0,0,0 }
-};
+} WaveCH[SND_CHANNELS];
 
 /** RenderAudio() Variables *******************************************/
 static int SndRate    = 0;        /* Sound rate (0=Off)               */
@@ -69,9 +46,6 @@ static int NoiseOut   = 16;       /* NoiseGen bit used for output     */
 static int NoiseXor   = 14;       /* NoiseGen bit used for XORing     */
 int MasterSwitch      = 0xFFFF;   /* Switches to turn channels on/off */
 int MasterVolume      = 192;      /* Master volume                    */
-
-extern YM2413_NukeYKT OPLL_NukeYKT;
-extern YM2413 OPLL;
 
 /** Sound() **************************************************/
 /** Generate sound of given frequency (Hz) and volume       **/
@@ -365,57 +339,24 @@ static unsigned int PlayAudio(int *Wave,unsigned int Samples)
 /** Render and play a given number of samples. Returns the  **/
 /** number of samples actually played.                      **/
 /*************************************************************/
-unsigned int RenderAndPlayAudio(unsigned int Samples)
+unsigned int RenderAndPlayAudio(unsigned int samples)
 {
-  int Buf[256];
-  unsigned int J,I,K,idx;
-  float ResampleRate,R,frac;
+  int mixed_samples[256];
+  unsigned int rendered = 0;
 
-  /* Exit if wave sound not initialized */
-  if(SndRate<8192) return(0);
-
-  /* silence fMSX FM-PAC if NukeYKT is active */
-  if(OPTION(MSX_NUKEYKT))
+  if (SndRate < 8192) return 0;
+  while (rendered < samples)
   {
-    for(K=0;K<YM2413_CHANNELS;K++)
-      Sound(K+OPLL.First,0,0);
-    OPLL.Changed=0;
+    unsigned int count = samples - rendered;
+    if (count > AUDIO_BUFFER_SIZE) count = AUDIO_BUFFER_SIZE;
+    if (count > sizeof mixed_samples / sizeof mixed_samples[0])
+      count = sizeof mixed_samples / sizeof mixed_samples[0];
+
+    memset(mixed_samples, 0, count * sizeof mixed_samples[0]);
+    RenderAudio(mixed_samples, count);
+    const unsigned int played = PlayAudio(mixed_samples, count);
+    rendered += played;
+    if (played != count) break;
   }
-
-  J       = AUDIO_BUFFER_SIZE;
-  Samples = Samples<J? Samples:J;
-  ResampleRate = (float)OPLL_NukeYKT.sample_write_index/Samples;
-
-  /* Render and play sound */
-  for(I=0,R=0.0;I<Samples;I+=J)
-  {
-    J = Samples-I;
-    J = J<sizeof(Buf)/sizeof(Buf[0])? J:sizeof(Buf)/sizeof(Buf[0]);
-    memset(Buf,0,J*sizeof(Buf[0]));
-    RenderAudio(Buf,J);
-
-    /*
-     * Merge in YM2413 NukeYKT using simplistic linear resampler.
-     * Max input range slightly outside [-1024,+1023], output [-32768,+32767] or 16b signed after amplification by 32.
-     * BUT matching it to PSG volume (by hand) requires a further amplification by 4.
-     * That's still a factor 4-8 less loud than fMSX's FM-PAC volume.
-     */
-    if(OPTION(MSX_NUKEYKT))
-      for(K=0;K<J;K++,R+=ResampleRate)
-      {
-        idx=(unsigned int)R;
-        frac=R-idx;
-        Buf[K]+=(int)(.5+128.0*(OPLL_NukeYKT.samples[idx]*(1.0-frac) + OPLL_NukeYKT.samples[idx+1]*frac));
-      }
-
-    if(PlayAudio(Buf,J)<J) { I+=J;break; }
-  }
-
-  // move last sample to beginning (for linear resampler) and signal a buffer refill
-  if (OPLL_NukeYKT.sample_write_index>0)
-    OPLL_NukeYKT.samples[0]=OPLL_NukeYKT.samples[OPLL_NukeYKT.sample_write_index-1];
-  OPLL_NukeYKT.sample_write_index=1;
-
-  /* Return number of samples rendered */
-  return I;
+  return rendered;
 }

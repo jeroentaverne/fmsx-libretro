@@ -728,3 +728,14 @@ The BIOS directory needs compatible `MSX2P.ROM`, `MSX2PEXT.ROM`, and
 `DISK.ROM` (user-supplied). Close the window to exit; Alt+Enter toggles
 fullscreen. `--disk file.dsk` optionally mounts an fMSX floppy image.
 The standalone frontend is basic: no menus or graphical disk selector yet.
+
+## Lean MSX2+ cartridge audio and ROM configuration
+
+The host fMSX fork no longer compiles YM2413 (either fMSX or NukeYKT),
+SCC/SCC+, or SCC-I MegaRAM emulation. These devices belong to the MSX Pico
+simulation; the host retains PSG, V9958, WD1793 floppy and regular MegaROM
+bank switching. The built-in FMPAC ROMs were deleted and the automatic
+FMPAC cartridge load at startup was removed. The special FMPAC SRAM mapper
+handling remains for historical compatibility, but no FMPAC sound is generated.
+Because the emulator-state layout changed, old libretro save states that
+include SCC/YM2413 structures are no longer compatible.

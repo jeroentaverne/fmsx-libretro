@@ -52,12 +52,8 @@
 #define MSE_XPOS     0x0000FFFF
 
 /** Sound ****************************************************/
-// fMSX emulates:
-// - AY8910 PSG: 3 melodic + 3 noise
-// - YM2413 OPLL: 9 FM sound channels (or 6 music + 5 drums, but fMSX does not emulate drums)
-// - SCC: 5 wave channels
-// Thus: max 20 channels active at once.
-#define SND_CHANNELS    20     /* Number of sound channels   */
+/* Three PSG tone and three PSG noise mixer generators. */
+#define SND_CHANNELS     6
 
 #ifdef __cplusplus
 extern "C" {
