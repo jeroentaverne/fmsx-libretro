@@ -1,0 +1,11 @@
+# Build native Ubuntu/WSLg SDL2 frontend (no RetroArch).
+CC ?= cc
+CFLAGS ?= -O2 -Wall -Wextra
+SDL_CFLAGS := $(shell sdl2-config --cflags)
+SDL_LIBS := $(shell sdl2-config --libs)
+.PHONY: all clean
+all: fmsx-ubuntu
+fmsx-ubuntu: standalone/ubuntu_main.c libretro.h
+	$(CC) -std=c11 $(CFLAGS) $(SDL_CFLAGS) -I. -o $@ standalone/ubuntu_main.c $(SDL_LIBS) -ldl
+clean:
+	rm -f fmsx-ubuntu

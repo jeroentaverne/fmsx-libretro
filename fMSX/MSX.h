@@ -42,7 +42,9 @@
 extern "C" {
 #endif
 
-#define CPU_CLOCK    3579545       /* CPU clock frequency Hz */
+#define CPU_CLOCK    3579545       /* Base Z80 CPU frequency Hz */
+int fmsx_cpu_frequency_hz(void);
+void MSXRefreshCPUTiming(void);
 #define VDP_CLOCK    (CPU_CLOCK*6) /* VDP clock frequency Hz */
 #define PSG_CLOCK    (CPU_CLOCK/2) /* PSG clock frequency Hz */
 

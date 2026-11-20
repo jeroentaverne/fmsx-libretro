@@ -685,7 +685,7 @@ static void update_fps(void)
       Mode&=~MSX_PAL;
       if (PALVideo) Mode|=MSX_PAL;
 
-      VPeriod = (VIDEO(MSX_PAL)? VPERIOD_PAL:VPERIOD_NTSC)/6;
+      MSXRefreshCPUTiming();
 
       freq = VIDEO(MSX_PAL) ? 50 : 60;
       if (fps != freq)

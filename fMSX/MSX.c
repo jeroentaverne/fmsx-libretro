@@ -15,6 +15,7 @@
 
 #include "MSX.h"
 #include "SlotLogic.h"
+#include "PanasonicTurbo.h"
 #ifdef MSXPICO_FMSX
 #include "MSXPicoBus.h"
 #endif
@@ -71,6 +72,7 @@ int  RAMPages    = 128;            /* 2 MiB: 128 x 16 KiB pages */
 int  VRAMPages   = 8;              /* 128 KiB V9958 VRAM */
 int  VRAMPageMask = 0x01;          /* VRAM page mask */
 uint8_t ExitNow     = 0;           /* 1 = Exit the emulator  */
+static panasonic_turbo_t panasonic_turbo;
 
 /** Main hardware: CPU, RAM, VRAM, mappers *******************/
 Z80 CPU;                           /* Z80 CPU state and regs */
@@ -345,6 +347,24 @@ uint8_t SetScreen(void);             /* Change screen mode              */
 uint16_t SetIRQ(uint8_t IRQ);            /* Set/Reset IRQ                   */
 uint16_t StateID(void);               /* Compute emulation state ID      */
 int  ApplyCheats(void);           /* Apply RAM-based cheats          */
+
+/* VDP frame length is fixed; Z80 cycles per frame vary with CPU speed. */
+int fmsx_cpu_frequency_hz(void)
+{
+    return panasonic_turbo.enabled ? TURBO_FREQUENCY_HZ : CPU_CLOCK;
+}
+
+static int scale_z80_cycles(int base)
+{
+    return (int)(((int64_t)base * fmsx_cpu_frequency_hz() + CPU_CLOCK / 2) / CPU_CLOCK);
+}
+
+void MSXRefreshCPUTiming(void)
+{
+    HPeriod = scale_z80_cycles(CPU_HPERIOD);
+    VPeriod = scale_z80_cycles((VIDEO(MSX_PAL) ? VPERIOD_PAL : VPERIOD_NTSC) / 6);
+    CPU.IPeriod = scale_z80_cycles(CPU_H240);
+}
 
 static int hasext(const char *FileName,const char *Ext);
 static uint8_t *GetMemory(int Size); /* Get memory chunk                */
@@ -821,9 +841,8 @@ int ResetMSX(int NewMode,int NewRAMPages,int NewVRAMPages)
   ROMType[1]     = ROMTYPE(1);
 
   /* Set CPU timings */
-  VPeriod        = (VIDEO(MSX_PAL)? VPERIOD_PAL:VPERIOD_NTSC)/6;
-  HPeriod        = HPERIOD/6;
-  CPU.IPeriod    = CPU_H240;
+  panasonic_turbo_reset(&panasonic_turbo);
+  MSXRefreshCPUTiming();
   CPU.IAutoReset = 0;
 
   /* Numbers of RAM pages should be power of 2 */
@@ -1085,6 +1104,10 @@ static uint8_t read_internal_msx_io(uint16_t Port)
   /* MSX only uses 256 IO ports */
   Port&=0xFF;
 
+  /* Switched-I/O range 40h-4Fh; only device 08h is implemented. */
+  if (Port >= 0x40 && Port <= 0x4f)
+    return panasonic_turbo_read(&panasonic_turbo, (uint8_t)Port);
+
   /* Return an appropriate port value */
   switch(Port)
   {
@@ -1253,6 +1276,12 @@ void OutZ80(uint16_t Port,uint8_t Value)
   uint8_t I,J;
 
   Port&=0xFF;
+  if (Port >= 0x40 && Port <= 0x4f)
+  {
+    if (panasonic_turbo_write(&panasonic_turbo, (uint8_t)Port, Value))
+      MSXRefreshCPUTiming();
+    return;
+  }
   switch(Port)
   {
 case 0x7C:
@@ -2075,7 +2104,7 @@ uint16_t LoopZ80(Z80 *R)
   if(!(VDPStatus[2]&0x20))
   {
     /* HRefresh takes most of the scanline */
-    R->IPeriod=!ScrMode||(ScrMode==MAXSCREEN+1)? CPU_H240:CPU_H256;
+    R->IPeriod=scale_z80_cycles(!ScrMode||(ScrMode==MAXSCREEN+1)? CPU_H240:CPU_H256);
 
     /* New scanline */
     ScanLine=ScanLine<(PALVideo? 312:261)? ScanLine+1:0;
@@ -2155,14 +2184,14 @@ uint16_t LoopZ80(Z80 *R)
   /*********************************/
 
   /* HBlank takes HPeriod-HRefresh */
-  R->IPeriod=!ScrMode||(ScrMode==MAXSCREEN+1)? CPU_H240:CPU_H256;
+  R->IPeriod=scale_z80_cycles(!ScrMode||(ScrMode==MAXSCREEN+1)? CPU_H240:CPU_H256);
   R->IPeriod=HPeriod-R->IPeriod;
 
   /* If last scanline of VBlank, see if we need to wait more */
   J=PALVideo? 313:262;
   if(ScanLine>=J-1)
   {
-    J*=CPU_HPERIOD;
+    J*=HPeriod;
     if(VPeriod>J) R->IPeriod+=VPeriod-J;
   }
 

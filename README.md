@@ -691,3 +691,40 @@ receives SPI command bytes through 7B00h–7EFFh in bank 7 and reads/writes
 512-byte sectors in the raw Linux image. This interface does not require
 Pico SDIO or physical SPI timing. The MSX BIOS and complete Nextor boot are
 **not yet end-to-end verified**.
+
+## Panasonic switched I/O / 8 MHz turbo
+
+MSX2+ Panasonic switched-I/O device 08h: `OUT (40h),08h` selects it;
+`IN (40h)` reads F7h. `IN (41h)` reports FBh at 3.58 MHz or FAh at turbo.
+`OUT (41h),00h` enables turbo; `OUT (41h),01h` disables it. Unlike the
+real Panasonic 5.37 MHz mode, the simulator's turbo is **8.00 MHz**.
+Only Z80 cycle budgets change; display is still 50/60 Hz and PSG/VDP clocks
+remain at the original values. The standalone Ubuntu window reads the
+exported `fmsx_cpu_frequency_hz()` and updates its title accordingly.
+
+## Standalone Ubuntu/WSLg window (no RetroArch)
+
+This fork includes the native SDL2 frontend in `standalone/ubuntu_main.c`.
+The fMSX emulation core is loaded directly by this application; **RetroArch
+is not needed**. The resizable window draws RGB565 MSX2+ video and displays
+`fMSX MSX2+ / MSX Pico - Z80 3.58 MHz` or `8.00 MHz` in its title as the
+Panasonic switched-I/O mode changes. Keyboard and audio are supported.
+
+Build on Ubuntu/WSL2 with WSLg (or a working X11/Wayland display):
+
+```sh
+sudo apt install build-essential libsdl2-dev
+cmake -S /path/to/msxpico_sw/simulator/host -B /path/to/msxpico_sw/build-host
+cmake --build /path/to/msxpico_sw/build-host -j2
+make -j2 platform=unix MSXPICO_FMSX=1 MSXPICO_SW_ROOT=/path/to/msxpico_sw MSXPICO_CORE1_C=/path/to/msxpico_sw/build-host/generated/core1_bus_extract.c
+make -f Makefile.ubuntu
+MSXPICO_SIM_MAPPER=nextor \\
+  MSXPICO_SIM_ROM=/path/to/msxpico_sw/systemroms/sdmapper_one_drive.rom \\
+  MSXPICO_SIM_SD=/path/to/virtual_sd.img \\
+  ./fmsx-ubuntu --bios /path/to/msx_system_roms
+```
+
+The BIOS directory needs compatible `MSX2P.ROM`, `MSX2PEXT.ROM`, and
+`DISK.ROM` (user-supplied). Close the window to exit; Alt+Enter toggles
+fullscreen. `--disk file.dsk` optionally mounts an fMSX floppy image.
+The standalone frontend is basic: no menus or graphical disk selector yet.

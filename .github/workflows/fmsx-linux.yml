@@ -23,5 +23,17 @@ jobs:
         run: python3 tests/smoke_slots.py fmsx_libretro.so
       - name: Check MSX2+ and 2 MiB host defaults
         run: python3 tests/smoke_msx2p_profile.py fmsx_libretro.so
+      - name: Verify Panasonic turbo switched I/O and CPU timings
+        run: python3 tests/smoke_panasonic_turbo.py fmsx_libretro.so
+      - name: Install SDL2 for standalone Ubuntu frontend
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libsdl2-dev
+      - name: Build native SDL2 GUI (no RetroArch)
+        run: make -f Makefile.ubuntu
+      - name: Verify standalone window and dynamic title without a display server
+        run: |
+          ./fmsx-ubuntu --help
+          SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy ./fmsx-ubuntu --self-test-window
       - name: Inspect shared-library dependencies
         run: ldd -r fmsx_libretro.so
