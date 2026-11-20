@@ -71,6 +71,7 @@ INCFLAGS += -I$(MSXPICO_HOST_ROOT)/simulator/fmsx \
 SOURCES_C += $(MSXPICO_HOST_ROOT)/simulator/fmsx/msxpico_fmsx_adapter.c \
              $(MSXPICO_HOST_ROOT)/simulator/host/bus_host.c \
              $(MSXPICO_HOST_ROOT)/simulator/host/frame_pacer.c \
+             $(MSXPICO_HOST_ROOT)/simulator/host/sd_spi_host.c \
              $(MSXPICO_CORE1_C)
 CFLAGS += -pthread -D_POSIX_C_SOURCE=200809L
 LDFLAGS += -pthread

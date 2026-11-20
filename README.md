@@ -679,3 +679,15 @@ endpoints; the Z80 receives `native_byte & pico_byte`, treating an inactive
 Pico peripheral as `0xFF`. The virtual bus is not cycle-accurate and does not
 emulate PIO or physical WAIT. The native floppy driver remains present; ROMs
 are still needed to boot the computer.
+
+## Virtual Nextor SD card (optional, MSXPICO_FMSX=1)
+
+The Linux host build now links the Pico simulator's SPI-mode SDHC and SD
+Mapper register backend. To use it, set `MSXPICO_SIM_MAPPER=nextor`,
+`MSXPICO_SIM_ROM=/path/to/sdmapper_one_drive.rom` and
+`MSXPICO_SIM_SD=/path/to/sdcard.img`. The ROM must be exactly 128 KiB;
+the image must be writable, at least 512 KiB and 512-KiB aligned. The card
+receives SPI command bytes through 7B00h–7EFFh in bank 7 and reads/writes
+512-byte sectors in the raw Linux image. This interface does not require
+Pico SDIO or physical SPI timing. The MSX BIOS and complete Nextor boot are
+**not yet end-to-end verified**.
