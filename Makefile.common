@@ -56,3 +56,22 @@ endif
 ifeq ($(PATCH_Z80), 1)
 SOURCES_C += $(FMSXDIR)/Patch.c
 endif
+
+# Optional MSX Pico external cartridge bus. Disabled in stock fMSX builds.
+# All firmware/host sources are taken from a separate local msxpico_sw checkout.
+ifeq ($(MSXPICO_FMSX),1)
+ifndef MSXPICO_SW_ROOT
+$(error MSXPICO_FMSX=1 requires MSXPICO_SW_ROOT=/absolute/path/to/msxpico_sw)
+endif
+MSXPICO_HOST_ROOT := $(abspath $(MSXPICO_SW_ROOT))
+MSXPICO_CORE1_C ?= $(MSXPICO_HOST_ROOT)/build-host/generated/core1_bus_extract.c
+COREDEFINES += -DMSXPICO_FMSX=1
+INCFLAGS += -I$(MSXPICO_HOST_ROOT)/simulator/fmsx \
+            -I$(MSXPICO_HOST_ROOT)/simulator/host
+SOURCES_C += $(MSXPICO_HOST_ROOT)/simulator/fmsx/msxpico_fmsx_adapter.c \
+             $(MSXPICO_HOST_ROOT)/simulator/host/bus_host.c \
+             $(MSXPICO_HOST_ROOT)/simulator/host/frame_pacer.c \
+             $(MSXPICO_CORE1_C)
+CFLAGS += -pthread -D_POSIX_C_SOURCE=200809L
+LDFLAGS += -pthread
+endif

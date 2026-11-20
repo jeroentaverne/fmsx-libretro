@@ -14,6 +14,9 @@
 /*************************************************************/
 
 #include "MSX.h"
+#ifdef MSXPICO_FMSX
+#include "MSXPicoBus.h"
+#endif
 #include "Sound.h"
 #include "Floppy.h"
 #include "SHA1.h"
@@ -963,6 +966,10 @@ int ResetMSX(int NewMode,int NewRAMPages,int NewVRAMPages)
 /*************************************************************/
 uint8_t RdZ80(uint16_t A)
 {
+#ifdef MSXPICO_FMSX
+  uint8_t pico_value;
+  if(msxpico_fmsx_mem_read(A,&pico_value)) return pico_value;
+#endif
   uint8_t J,PS,SS,I;
 
   /* Secondary slot selector */
@@ -1007,6 +1014,9 @@ uint8_t RdZ80(uint16_t A)
 /*************************************************************/
 void WrZ80(uint16_t A,uint8_t V)
 {
+#ifdef MSXPICO_FMSX
+  if(msxpico_fmsx_mem_write(A,V)) return;
+#endif
   /* Secondary slot selector */
   if(A==0xFFFF) { SSlot(V);return; }
 
@@ -1052,6 +1062,10 @@ void WrZ80(uint16_t A,uint8_t V)
 /*************************************************************/
 uint8_t InZ80(uint16_t Port)
 {
+#ifdef MSXPICO_FMSX
+  uint8_t pico_value;
+  if(msxpico_fmsx_io_read(Port,&pico_value)) return pico_value;
+#endif
   /* MSX only uses 256 IO ports */
   Port&=0xFF;
 
@@ -1200,6 +1214,9 @@ case 0xD4: /* FDC IRQ/DRQ */
 /*************************************************************/
 void OutZ80(uint16_t Port,uint8_t Value)
 {
+#ifdef MSXPICO_FMSX
+  if(msxpico_fmsx_io_write(Port,Value)) return;
+#endif
   uint8_t I,J;
 
   Port&=0xFF;

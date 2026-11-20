@@ -621,3 +621,33 @@ The following fMSX code is not present in this core:
     -nosound
 * All effects-related options
 * All options based on a platform-specific `#define` (incl. `-static`, `-nosync` & `-sync`)
+
+## Optional MSX Pico host cartridge integration
+
+This fork carries optional Z80 memory and I/O hooks for the MSX Pico Linux
+host simulator. **Ordinary fMSX builds are unchanged.** No Pico firmware is
+copied into this public repository. All host firmware modules must be built
+separately from the owner's MSX Pico source checkout.
+
+On Linux/WSL2, in that checkout, first run:
+
+```sh
+cmake -S simulator/host -B build-host -DCMAKE_BUILD_TYPE=Debug
+cmake --build build-host -j2
+```
+
+Then build this fMSX fork:
+
+```sh
+make -j2 platform=unix MSXPICO_FMSX=1 MSXPICO_SW_ROOT=/absolute/path/to/msxpico_sw
+```
+
+Set `MSXPICO_SIM_ROM=/absolute/path/to/test.rom` and optionally
+`MSXPICO_SIM_MAPPER=ascii8` to enable the cartridge bus connection at runtime.
+The host adapter currently accepts only the selected cartridge's primary
+slot 1, subslot 0, within 4000h-BFFFh; unclaimed I/O continues through fMSX.
+Its ROM image is loaded into host RAM, never into Pico flash. The adapter uses
+a blocking condition variable between bus events and a monotonic 50/60 Hz
+frame pacer while attached. No BIOS or full MSX Pico firmware boot has yet
+been demonstrated. Only the normal-ROM and ASCII8 mapper loops are connected;
+Core 0 and other hardware emulation remain future work.

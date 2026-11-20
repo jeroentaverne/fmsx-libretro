@@ -19,6 +19,9 @@
 #endif
 
 #include "MSX.h"
+#ifdef MSXPICO_FMSX
+#include "MSXPicoBus.h"
+#endif
 #include "EMULib.h"
 #include "Sound.h"
 #include "FDIDisk.h"
@@ -1291,6 +1294,9 @@ bool retro_load_game(const struct retro_game_info *info)
    SetChannels(255/MAXCHANNELS, (1<<MAXCHANNELS)-1);
 
    StartMSX(Mode,RAMPages,VRAMPages);
+#ifdef MSXPICO_FMSX
+   (void)msxpico_fmsx_attach_from_env();
+#endif
    if (!have_image && phantom_disk)
    {
       if (info && (dot = strrchr(info->path, '.')) && !strcasecmp(dot, ".dsk"))
@@ -1424,6 +1430,9 @@ void retro_unload_game(void)
    cleanup_sram();
    num_disk_images = 0;
 
+#ifdef MSXPICO_FMSX
+   msxpico_fmsx_stop();
+#endif
    TrashMSX();
 }
 
@@ -1691,6 +1700,9 @@ void retro_run(void)
 
    RunZ80(&CPU);
    RenderAndPlayAudio(SND_RATE / fps);
+#ifdef MSXPICO_FMSX
+   msxpico_fmsx_pace(fps);
+#endif
 
    fflush(stdout);
 
