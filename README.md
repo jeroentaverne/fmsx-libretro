@@ -761,3 +761,13 @@ The Pico simulator also includes a Linux ESP8266/UNAPI network transport,
 including virtual AP status, DNS, TCP, and certificate-verified OpenSSL TLS.
 The Pico Core0 applications are not yet linked, so it is currently a tested
 host transport, not an interactive FileHunter or RSS feature.
+
+## Zero-configuration host cartridge media
+
+If no `MSXPICO_SIM_*` environment variables are set, the standalone GUI
+looks for `ROMs/sdmapper_one_drive.rom` and a writable `virtual_sd.img`
+next to its executable. With both present, Pico slot 1 and Nextor SPI SDHC
+are enabled automatically. Explicit environment variables override these
+defaults. The prepared SD image contains a FAT32 partition but no
+NEXTOR.SYS/COMMAND2.COM files; a fully bootable DOS filesystem must be
+supplied separately.

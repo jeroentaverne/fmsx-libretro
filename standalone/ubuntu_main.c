@@ -46,6 +46,30 @@ static fmsx_core_t core;
 
 /* The fork ships its original BIOS files. Locate them relative to the
  * executable, never requiring an external BIOS download or RetroArch. */
+/* Optional out-of-the-box Nextor cartridge and virtual SD image.
+ * Explicit environment variables always take precedence. */
+static void find_bundled_pico_media(void)
+{
+    if (getenv("MSXPICO_SIM_ROM") || getenv("MSXPICO_SIM_SD") ||
+        getenv("MSXPICO_SIM_MAPPER")) return;
+    char executable[4096];
+    const ssize_t n = readlink("/proc/self/exe", executable, sizeof executable - 1);
+    if (n <= 0) return;
+    executable[n] = 0;
+    char *end = strrchr(executable, '/');
+    if (!end) return;
+    *end = 0;
+    char rom[4096], sd[4096];
+    if (snprintf(rom, sizeof rom, "%s/ROMs/sdmapper_one_drive.rom", executable)
+        >= (int)sizeof rom) return;
+    if (snprintf(sd, sizeof sd, "%s/virtual_sd.img", executable)
+        >= (int)sizeof sd) return;
+    if (access(rom, R_OK) || access(sd, R_OK | W_OK)) return;
+    (void)setenv("MSXPICO_SIM_MAPPER", "nextor", 0);
+    (void)setenv("MSXPICO_SIM_ROM", rom, 0);
+    (void)setenv("MSXPICO_SIM_SD", sd, 0);
+}
+
 static void find_bundled_bios(void)
 {
     char executable[4096];
@@ -354,6 +378,7 @@ int main(int argc, char **argv)
     }
 
     if (!manual_bios) find_bundled_bios();
+    find_bundled_pico_media();
 
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_EVENTS))
     {
