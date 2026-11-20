@@ -21,5 +21,7 @@ jobs:
         run: /tmp/fmsx-test-slots
       - name: Exercise actual fMSX memory reads and writes at FFFFh
         run: python3 tests/smoke_slots.py fmsx_libretro.so
+      - name: Check MSX2+ and 2 MiB host defaults
+        run: python3 tests/smoke_msx2p_profile.py fmsx_libretro.so
       - name: Inspect shared-library dependencies
         run: ldd -r fmsx_libretro.so

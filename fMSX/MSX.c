@@ -63,12 +63,12 @@ extern retro_log_printf_t log_cb;
 #endif
 
 /** User-defined parameters for fMSX *************************/
-int  Mode        = MSX_MSX2|MSX_NTSC|MSX_MSXDOS2|MSX_GUESSA|MSX_GUESSB;
+int  Mode        = MSX_MSX2P|MSX_NTSC|MSX_MSXDOS2|MSX_GUESSA|MSX_GUESSB;
 uint8_t UPeriod  = 75;             /* % of frames to draw    */
 int  VPeriod     = CPU_VPERIOD;    /* CPU cycles per VBlank  */
 int  HPeriod     = CPU_HPERIOD;    /* CPU cycles per HBlank  */
-int  RAMPages    = 4;              /* Number of RAM pages    */
-int  VRAMPages   = 2;              /* Number of VRAM pages   */
+int  RAMPages    = 128;            /* 2 MiB: 128 x 16 KiB pages */
+int  VRAMPages   = 8;              /* 128 KiB V9958 VRAM */
 int  VRAMPageMask = 0x01;          /* VRAM page mask */
 uint8_t ExitNow     = 0;           /* 1 = Exit the emulator  */
 
@@ -112,7 +112,7 @@ uint8_t SaveSRAM[MAXSLOTS] = {0,0,0,0,0,0}; /* Save SRAM on exit*/
 uint8_t *SRAMData[MAXSLOTS];          /* SRAM (battery backed)  */
 
 /** Disk images used by fMSX *********************************/
-const char *DSKName[MAXDRIVES] = { "DRIVEA.DSK","DRIVEB.DSK" };
+const char *DSKName[MAXDRIVES] = { "DRIVEA.DSK" };
 uint8_t DiskROMLoaded = 0;            /* 1 when DISK.ROM loaded */
 
 /** Fixed font used by fMSX **********************************/
@@ -1079,12 +1079,9 @@ void WrZ80(uint16_t address, uint8_t value)
 /** Z80 emulation calls this function to read a uint8_t from   **/
 /** a given I/O port.                                       **/
 /*************************************************************/
-uint8_t InZ80(uint16_t Port)
+/* Read the native MSX I/O endpoint; a separate wrapper merges Pico data. */
+static uint8_t read_internal_msx_io(uint16_t Port)
 {
-#ifdef MSXPICO_FMSX
-  uint8_t pico_value;
-  if(msxpico_fmsx_io_read(Port,&pico_value)) return pico_value;
-#endif
   /* MSX only uses 256 IO ports */
   Port&=0xFF;
 
@@ -1231,10 +1228,27 @@ case 0xD4: /* FDC IRQ/DRQ */
 /** Z80 emulation calls this function to write uint8_t V to a  **/
 /** given I/O port.                                         **/
 /*************************************************************/
+/* Logical open-collector bus: devices pull zero bits low. The Pico host
+ * only returns a value if its peripheral asserts data on an IN cycle;
+ * otherwise its effective byte is FFh (no electrical bus drive).
+ * Read each emulated endpoint exactly once, retaining native side effects. */
+uint8_t InZ80(uint16_t port)
+{
+  uint8_t internalValue = read_internal_msx_io(port);
+#ifdef MSXPICO_FMSX
+  uint8_t picoValue = 0xFF;
+  (void)msxpico_fmsx_io_read(port, &picoValue);
+  return internalValue & picoValue;
+#else
+  return internalValue;
+#endif
+}
+
 void OutZ80(uint16_t Port,uint8_t Value)
 {
 #ifdef MSXPICO_FMSX
-  if(msxpico_fmsx_io_write(Port,Value)) return;
+  /* Every OUT is broadcast to Pico and then handled by native MSX I/O. */
+  (void)msxpico_fmsx_io_write(Port, Value);
 #endif
   uint8_t I,J;
 

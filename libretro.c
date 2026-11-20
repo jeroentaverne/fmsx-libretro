@@ -724,41 +724,10 @@ static void check_variables(void)
 {
    bool reset_sfx = false;
    struct retro_variable var;
-   int ModeRAM = 0;
-   int ModeVRAM = 0;
+   const int ModeVRAM = 8; /* 128 KiB V9958 VRAM */
 
-   var.key = "fmsx_mode";
-   var.value = NULL;
-
-   Mode = 0;
-
-   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
-   {
-      if (strcmp(var.value, "MSX1") == 0)
-      {
-         Mode |= MSX_MSX1;
-         ModeRAM = 4;
-         ModeVRAM = 2;
-      }
-      else if (strcmp(var.value, "MSX2") == 0)
-      {
-         Mode |= MSX_MSX2;
-         ModeRAM = 8;
-         ModeVRAM = 8;
-      }
-      else if (strcmp(var.value, "MSX2+") == 0)
-      {
-         Mode |= MSX_MSX2P;
-         ModeRAM = 16;
-         ModeVRAM = 8;
-      }
-   }
-   else
-   {
-      Mode |= MSX_MSX2P;
-      ModeRAM = 16;
-      ModeVRAM = 8;
-   }
+   /* Fixed MSX2+ host: V9958 and Pico cartridge in primary slot 1. */
+   Mode = MSX_MSX2P;
 
    var.key = "fmsx_video_mode";
    var.value = NULL;
@@ -890,28 +859,7 @@ static void check_variables(void)
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value && strcmp(var.value, "NukeYKT") == 0)
       Mode |= MSX_NUKEYKT;
 
-   var.key = "fmsx_ram_pages";
-   var.value = NULL;
-
-   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
-   {
-      if (strcmp(var.value, "Auto") == 0)
-         RAMPages = ModeRAM;
-      else if (strcmp(var.value, "64KB") == 0)
-         RAMPages = 4;
-      else if (strcmp(var.value, "128KB") == 0)
-         RAMPages = 8;
-      else if (strcmp(var.value, "256KB") == 0)
-         RAMPages = 16;
-      else if (strcmp(var.value, "512KB") == 0)
-         RAMPages = 32;
-      else if (strcmp(var.value, "4MB") == 0)
-         RAMPages = 256;
-   }
-   else
-   {
-      RAMPages = ModeRAM;
-   }
+   RAMPages = 128; /* Fixed 2 MiB RAM, 128 x 16 KiB mapper banks. */
 
    var.key = "fmsx_vram_pages";
    var.value = NULL;
@@ -1529,7 +1477,6 @@ void retro_set_environment(retro_environment_t cb)
    char* l3_value = custom_keyboard_values("Custom keyboard RetroPad l3; ",         custom_keyboard_fmsx_to_name(keybemu1_map[14].fmsx));
    char* r3_value = custom_keyboard_values("Custom keyboard RetroPad r3; ",         custom_keyboard_fmsx_to_name(keybemu1_map[15].fmsx));
    const struct retro_variable vars[] = {
-      { "fmsx_mode", "MSX Mode; MSX2+|MSX1|MSX2" },
       { "fmsx_video_mode", "MSX Video Mode; NTSC|PAL|Dynamic" },
       { "fmsx_hires", "Support high resolution; Off|Interlaced|Progressive" },
       { "fmsx_overscan", "Support overscan; No|Yes" },
@@ -1544,7 +1491,6 @@ void retro_set_environment(retro_environment_t cb)
             "GameMaster2|"
             "FMPAC"
       },
-      { "fmsx_ram_pages", "MSX Main Memory; Auto|64KB|128KB|256KB|512KB|4MB" },
       { "fmsx_vram_pages", "MSX Video Memory; Auto|32KB|64KB|128KB|192KB" },
       { "fmsx_scci_megaram", "Enable SCC-I 128kB MegaRAM; Yes|No" },
       { "fmsx_ym2413_core", "YM2413 (FM-PAC / MSX-MUSIC) core; fMSX|NukeYKT" },

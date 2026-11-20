@@ -669,3 +669,13 @@ The public fMSX callback names and state format remain unchanged. A
 `.clang-format` profile documents the style for subsequent maintenance.
 `tests/test_slot_logic.c` covers the slot rules; `tests/smoke_slots.py`
 checks real fMSX Z80 memory callbacks without needing proprietary BIOS ROMs.
+
+## Fixed MSX2+ PC and logical I/O bus
+
+The host profile defaults to MSX2+ (V9958), **2 MiB RAM** (128 mapper pages),
+128 KiB VRAM and one WD1793 floppy drive. MSX Pico is on **primary slot 1**.
+All CPU OUT cycles are broadcast to Pico and fMSX. All IN cycles read both
+endpoints; the Z80 receives `native_byte & pico_byte`, treating an inactive
+Pico peripheral as `0xFF`. The virtual bus is not cycle-accurate and does not
+emulate PIO or physical WAIT. The native floppy driver remains present; ROMs
+are still needed to boot the computer.

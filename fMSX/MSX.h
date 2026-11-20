@@ -102,7 +102,7 @@ extern "C" {
 #define MAXSCREEN   12      /* Highest screen mode supported */
 #define MAXSPRITE1  4       /* Sprites/line in SCREEN 1-3    */
 #define MAXSPRITE2  8       /* Sprites/line in SCREEN 4-8    */
-#define MAXDRIVES   2       /* Number of disk drives         */
+#define MAXDRIVES   1       /* Drive A only (WD1793 retained) */
 #define MAXDISKS    32      /* Number of disks for a drive   */
 #define MAXSLOTS    6       /* Number of cartridge slots     */
 #define MAXCARTS    2       /* Number of user cartridges     */
