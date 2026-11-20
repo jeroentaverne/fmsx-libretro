@@ -739,3 +739,11 @@ FMPAC cartridge load at startup was removed. The special FMPAC SRAM mapper
 handling remains for historical compatibility, but no FMPAC sound is generated.
 Because the emulator-state layout changed, old libretro save states that
 include SCC/YM2413 structures are no longer compatible.
+
+## Pico is the only audio source
+
+Native fMSX PSG is register and joystick I/O only (A0h/A1h/A2h), with no
+internal sound generation. When the Pico host is attached, the fMSX core
+renders real Pico PSG, SCC and YM2413 engines to 48-kHz stereo PCM.
+Other sound chips and the exact production mixing path are not yet available
+in this host layer; no sample-cycle scheduling has been implemented.

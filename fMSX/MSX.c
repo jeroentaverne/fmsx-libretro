@@ -19,7 +19,6 @@
 #ifdef MSXPICO_FMSX
 #include "MSXPicoBus.h"
 #endif
-#include "Sound.h"
 #include "Floppy.h"
 #include "SHA1.h"
 #include "MCF.h"
@@ -2098,20 +2097,6 @@ uint16_t LoopZ80(Z80 *R)
     else
       if(ModeYAE) RefreshLine10(ScanLine);
       else RefreshLine12(ScanLine);
-  }
-
-  /* Every few scanlines, update sound */
-  if(!(ScanLine&0x07))
-  {
-    /* Compute number of microseconds */
-    J = (int)(1000000L*(CPU_HPERIOD<<3)/CPU_CLOCK);
-
-    /* Update AY8910 state */
-    Loop8910(&PSG,J);
-
-    /* Flush changes to sound channels */
-    Sync8910(&PSG,AY8910_FLUSH);
-
   }
 
   /* Keyboard, sound, and other stuff always runs at line 192    */

@@ -23,7 +23,6 @@
 #include "MSXPicoBus.h"
 #endif
 #include "EMULib.h"
-#include "Sound.h"
 #include "FDIDisk.h"
 
 static bool video_mode_dynamic=false;
@@ -1226,9 +1225,6 @@ bool retro_load_game(const struct retro_game_info *info)
    for(i = 0; i < 256; i++)
       BPal[i]=PIXEL(((i>>2)&0x07)*255/7,((i>>5)&0x07)*255/7,(i&0x03)*255/3);
 
-   InitSound(SND_RATE);
-   SetChannels(255/MAXCHANNELS, (1<<MAXCHANNELS)-1);
-
    StartMSX(Mode,RAMPages,VRAMPages);
 #ifdef MSXPICO_FMSX
    (void)msxpico_fmsx_attach_from_env();
@@ -1263,21 +1259,6 @@ void SetColor(uint8_t N,uint8_t R,uint8_t G,uint8_t B)
      XPal[N]=PIXEL(R,G,B);
   else
      XPal0=PIXEL(R,G,B);
-}
-
-unsigned int WriteAudio(int16_t *Data,unsigned int Length)
-{
-   static uint16_t audio_buf[AUDIO_BUFFER_SIZE * 2];
-   int i;
-   if (Length > AUDIO_BUFFER_SIZE)
-      Length = AUDIO_BUFFER_SIZE;
-   for (i=0; i < Length; i++)
-   {
-      audio_buf[i << 1]       = Data[i];
-      audio_buf[(i << 1) + 1] = Data[i];
-   }
-
-   return audio_batch_cb((const int16_t*)audio_buf, Length);
 }
 
 unsigned int Joystick(void)
@@ -1631,8 +1612,18 @@ void retro_run(void)
    handle_tape_autotype();
 
    RunZ80(&CPU);
-   RenderAndPlayAudio(SND_RATE / fps);
 #ifdef MSXPICO_FMSX
+   /* Pico chip emulators are the sole audio source; fMSX PSG is I/O only. */
+   if (fps && audio_batch_cb)
+   {
+      static int16_t pico_pcm[1024 * 2];
+      const unsigned frames = SND_RATE / fps;
+      if (frames <= 1024)
+      {
+         msxpico_fmsx_render_audio(pico_pcm, frames);
+         audio_batch_cb(pico_pcm, frames);
+      }
+   }
    msxpico_fmsx_pace(fps);
 #endif
 

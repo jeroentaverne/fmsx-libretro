@@ -51,10 +51,6 @@
 #define MSE_YPOS     0x3FFF0000
 #define MSE_XPOS     0x0000FFFF
 
-/** Sound ****************************************************/
-/* Three PSG tone and three PSG noise mixer generators. */
-#define SND_CHANNELS     6
-
 #ifdef __cplusplus
 extern "C" {
 #endif
