@@ -15,6 +15,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 typedef struct fmsx_core {
     void (*set_environment)(retro_environment_t);
@@ -42,6 +43,36 @@ static struct retro_keyboard_callback keyboard_callback;
 static bool key_states[RETROK_LAST];
 static bool quitting;
 static fmsx_core_t core;
+
+/* The fork ships its original BIOS files. Locate them relative to the
+ * executable, never requiring an external BIOS download or RetroArch. */
+static void find_bundled_bios(void)
+{
+    char executable[4096];
+    const ssize_t length = readlink("/proc/self/exe", executable,
+                                     sizeof executable - 1);
+    if (length <= 0) return;
+    executable[length] = 0;
+    char *slash = strrchr(executable, '/');
+    if (!slash) return;
+    *slash = 0;
+    char candidate[4096];
+    const char *const folders[] = { "ROMs", "fMSX/ROMs" };
+    for (unsigned i = 0; i < 2; ++i)
+    {
+        if (snprintf(candidate, sizeof candidate, "%s/%s", executable,
+                     folders[i]) >= (int)sizeof candidate)
+            continue;
+        char required[4096];
+        if (snprintf(required, sizeof required, "%s/MSX2P.ROM", candidate)
+            >= (int)sizeof required) continue;
+        if (access(required, R_OK) == 0)
+        {
+            strcpy(bios_directory, candidate);
+            return;
+        }
+    }
+}
 
 static void update_title(void)
 {
@@ -290,6 +321,7 @@ int main(int argc, char **argv)
     const char *library_path = "./fmsx_libretro.so";
     const char *disk_path = NULL;
     bool self_test_window = false;
+    bool manual_bios = false;
     for (int i = 1; i < argc; ++i)
     {
         if (!strcmp(argv[i], "--help") || !strcmp(argv[i], "-h"))
@@ -313,12 +345,15 @@ int main(int argc, char **argv)
                     return EXIT_FAILURE;
                 }
                 strcpy(bios_directory, value);
+                manual_bios = true;
             }
             continue;
         }
         usage(argv[0]);
         return EXIT_FAILURE;
     }
+
+    if (!manual_bios) find_bundled_bios();
 
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_EVENTS))
     {
@@ -380,8 +415,8 @@ int main(int argc, char **argv)
     if (disk_path) disk.path = disk_path;
     if (!core.load_game(disk_path ? &disk : NULL))
     {
-        fputs("MSX startup failed. Supply required BIOS ROMs in --bios directory.\n",
-              stderr);
+        fprintf(stderr, "MSX startup failed. Checked BIOS directory: %s\n",
+                bios_directory);
         core.deinit();
         dlclose(library);
         return EXIT_FAILURE;

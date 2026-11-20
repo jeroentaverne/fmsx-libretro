@@ -747,3 +747,17 @@ internal sound generation. When the Pico host is attached, the fMSX core
 renders real Pico PSG, SCC and YM2413 engines to 48-kHz stereo PCM.
 Other sound chips and the exact production mixing path are not yet available
 in this host layer; no sample-cycle scheduling has been implemented.
+
+## Automatically bundled MSX2+ BIOS ROMs
+
+The native Ubuntu application now searches for `ROMs/MSX2P.ROM` next to
+its executable, falling back to `fMSX/ROMs` when running inside the source
+tree. It uses the existing BIOS files supplied with the fMSX fork and
+requires no separate user BIOS path. You may override with `--bios DIR`.
+The MSX Pico GitHub Actions build packages the required ROMs with the
+SDL2 executable and shared emulation core.
+
+The Pico simulator also includes a Linux ESP8266/UNAPI network transport,
+including virtual AP status, DNS, TCP, and certificate-verified OpenSSL TLS.
+The Pico Core0 applications are not yet linked, so it is currently a tested
+host transport, not an interactive FileHunter or RSS feature.
