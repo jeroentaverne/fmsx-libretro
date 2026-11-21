@@ -67,7 +67,7 @@ int  Mode        = MSX_MSX2P|MSX_NTSC|MSX_MSXDOS2|MSX_GUESSA|MSX_GUESSB;
 /* MSX2+ reset-status latch (I/O F4h): bit 7 distinguishes a warm boot.
  * A hardware reset clears it; a software jump to BIOS address 0000h
  * leaves it intact. On the Philips NMS8250 MSX2+ upgrade bit 5 reads 1. */
-static uint8_t MSXResetFlagF4 = 0x20;
+static uint8_t MSXResetFlagF4 = 0x00;
 uint8_t UPeriod  = 75;             /* % of frames to draw    */
 int  VPeriod     = CPU_VPERIOD;    /* CPU cycles per VBlank  */
 int  HPeriod     = CPU_HPERIOD;    /* CPU cycles per HBlank  */
@@ -913,8 +913,9 @@ int ResetMSX(int NewMode,int NewRAMPages,int NewVRAMPages)
       /* then it is not a MegaROM but rather a plain 64kB ROM       */
     }
 
-  /* Hard reset clears the MSX2+ F4h warm-boot latch. */
-  MSXResetFlagF4 = 0x20;
+  /* A real hard reset clears ALL MSX2+ F4h initialization flags.
+   * Bit 5 must start clear, otherwise BIOS skips the cold-start logo. */
+  MSXResetFlagF4 = 0x00;
 
   /* Reset sound chips */
   Reset8910(&PSG,PSG_CLOCK,FIRST_AY8910_CHANNEL);
@@ -1272,8 +1273,9 @@ void OutZ80(uint16_t Port,uint8_t Value)
   switch(Port)
   {
 case 0x91: Printer(Value);return;                 /* Printer Data   */
-case 0xF4: /* MSX2+ reset-status latch: only warm-boot bit is writable. */
-  if (MODEL(MSX_MSX2P)) MSXResetFlagF4 = (Value & 0x80) | 0x20;
+case 0xF4: /* MSX2+ reset-status register; BIOS sets bit 5 after initialization.
+              * Bit 7 distinguishes software (warm) resets. */
+  if (MODEL(MSX_MSX2P)) MSXResetFlagF4 = Value;
   return;
 case 0xA0: WrCtrl8910(&PSG,Value);return;         /* PSG Register#  */
 case 0xB4: RTCReg=Value&0x0F;return;              /* RTC Register#  */
