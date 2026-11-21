@@ -8,7 +8,7 @@
  */
 #define _POSIX_C_SOURCE 200809L
 #include "libretro.h"
-#include "avi_recorder.h"
+#include "mp4_recorder.h"
 #include "png_screenshot.h"
 #include "wav_recorder.h"
 #include <SDL2/SDL.h>
@@ -46,19 +46,17 @@ static struct retro_keyboard_callback keyboard_callback;
 static bool key_states[RETROK_LAST];
 static bool quitting;
 static fmsx_core_t core;
-static avi_recorder_t recorder;
+static mp4_recorder_t recorder;
 static wav_recorder_t audio_capture;
 static unsigned recorder_sample_rate = 48000;
 static bool media_capture_failed;
 static unsigned recorder_fps = 30;
 static unsigned emulator_fps = 60;
 static bool record_full_rate;
-static bool mp4_preview = true;
 static char recorder_path[4096];
-static char recording_final_avi[4096];
+static char recording_final_mp4[4096];
 static char recording_video_part[4096];
 static char recording_wav_path[4096];
-static char recording_mp4_path[4096];
 static unsigned recorder_sequence;
 static bool auto_record;
 static bool self_test_shortcuts;
@@ -151,8 +149,7 @@ static void update_title(void)
     char title[128];
     snprintf(title, sizeof title, "fMSX %s / MSX Pico - Z80 %.2f MHz%s",
              use_nms8245() ? "Philips NMS8245 MSX2" : "MSX2+",
-             (double)hz / 1000000.0, recorder.active ?
-             (mp4_preview ? " [REC AVI + WAV + MP4]" : " [REC AVI + WAV]") : "");
+             (double)hz / 1000000.0, recorder.active ? " [REC MP4 + WAV]" : "");
     SDL_SetWindowTitle(window, title);
 }
 
@@ -208,12 +205,12 @@ static bool environment(unsigned cmd, void *data)
 static void video_frame(const void *data, unsigned width,
                         unsigned height, size_t pitch)
 {
-    /* Feed every emulated video frame to the lossless encoder before SDL
+    /* Feed every emulated video frame to the MP4 encoder before SDL
      * presentation. The pipe blocks instead of dropping delayed frames. */
     if (recorder.active &&
-        !avi_recorder_frame(&recorder, data, width, height, pitch))
+        !mp4_recorder_frame(&recorder, data, width, height, pitch))
     {
-        fputs("AVI: encoder failed while writing video frame\n", stderr);
+        fputs("MP4: encoder failed while writing video frame\n", stderr);
         quitting = true;
         return;
     }
@@ -370,8 +367,8 @@ static unsigned map_key(SDL_Keycode code)
     }
 }
 
-/* Ctrl+Shift+R toggles recording without injecting a key into the MSX.
- * Subsequent recording sessions use distinct filenames, never overwrite. */
+/* Ctrl+Shift+R toggles MP4/WAV capture without injecting an MSX key.
+ * Every recording has a unique filename; never overwrite prior files. */
 static bool start_recording(void)
 {
     char filename[4096];
@@ -382,11 +379,11 @@ static bool start_recording(void)
         else
         {
             const size_t n = strlen(recorder_path);
-            const bool avi = n >= 4 && !strcmp(recorder_path + n - 4, ".avi");
-            const int result = snprintf(filename, sizeof filename,
-                "%.*s-%04u.avi", (int)(avi ? n - 4 : n),
-                recorder_path, recorder_sequence);
-            if (result < 0 || result >= (int)sizeof filename) return false;
+            if (n < 4 || strcmp(recorder_path + n - 4, ".mp4")) return false;
+            const int count = snprintf(filename, sizeof filename,
+                     "%.*s-%04u.mp4", (int)(n - 4),
+                     recorder_path, recorder_sequence);
+            if (count < 0 || count >= (int)sizeof filename) return false;
         }
     }
     else
@@ -395,42 +392,34 @@ static bool start_recording(void)
         {
             if (recorder_sequence >= 9999) return false;
             ++recorder_sequence;
-            snprintf(filename, sizeof filename, "fmsx-capture-%04u.avi",
+            snprintf(filename, sizeof filename, "fmsx-capture-%04u.mp4",
                      recorder_sequence);
         } while (access(filename, F_OK) == 0);
     }
 
     const size_t n = strlen(filename);
-    if (n < 4 || strcmp(filename + n - 4, ".avi")) return false;
-    /* Write temporary FFV1 video while WAV gets the exact audio samples;
-     * after recording, stream-copy both into the final AVI with PCM audio.
-     * Final AVI and WAV are distinct outputs with the same base filename. */
-    char wav_path[4096], video_part[4096], mp4_path[4096];
-    if (snprintf(video_part, sizeof video_part, "%.*s.video-only.part.avi",
+    if (n < 5 || strcmp(filename + n - 4, ".mp4")) return false;
+    char wav_path[4096], video_part[4096];
+    if (snprintf(video_part, sizeof video_part, "%.*s.video-only.part.mp4",
                  (int)(n - 4), filename) >= (int)sizeof video_part)
         return false;
     memcpy(wav_path, filename, n + 1);
     memcpy(wav_path + n - 4, ".wav", 5);
-    memcpy(mp4_path, filename, n + 1);
-    memcpy(mp4_path + n - 4, ".mp4", 5);
     if (access(filename, F_OK) == 0 || access(video_part, F_OK) == 0 ||
-        (mp4_preview && access(mp4_path, F_OK) == 0))
+        access(wav_path, F_OK) == 0)
         return false;
 
     if (!wav_recorder_start(&audio_capture, wav_path, recorder_sample_rate))
         return false;
-    if (!avi_recorder_start(&recorder, video_part,
-                            emulator_fps, recorder_fps))
+    if (!mp4_recorder_start(&recorder, video_part, emulator_fps, recorder_fps))
     {
         (void)wav_recorder_stop(&audio_capture);
-        (void)unlink(wav_path); /* Created exclusively during this attempt. */
+        (void)unlink(wav_path); /* Only the WAV created by this attempt. */
         return false;
     }
-    strcpy(recording_final_avi, filename);
+    strcpy(recording_final_mp4, filename);
     strcpy(recording_video_part, video_part);
     strcpy(recording_wav_path, wav_path);
-    if (mp4_preview) strcpy(recording_mp4_path, mp4_path);
-    else recording_mp4_path[0] = 0;
     if (recorder_path[0]) ++recorder_sequence;
     update_title();
     return true;
@@ -438,24 +427,15 @@ static bool start_recording(void)
 
 static bool stop_recording(void)
 {
-    /* First finalize the original video and WAV streams. No audio or
-     * video samples are changed when the two streams are muxed below. */
-    const bool video = !recorder.active || avi_recorder_stop(&recorder);
+    const bool video = !recorder.active || mp4_recorder_stop(&recorder);
     const bool audio = !audio_capture.active ||
                        wav_recorder_stop(&audio_capture);
     bool ok = video && audio;
     if (ok)
-        ok = avi_recorder_mux_audio(recording_video_part,
-                                    recording_wav_path, recording_final_avi);
-    if (ok)
-    {
-        /* Keep both final .avi (video+audio) and .wav (audio only). */
-        if (unlink(recording_video_part) != 0)
-            perror("AVI: unable to remove temporary video file");
-        if (recording_mp4_path[0] &&
-            !avi_recorder_export_mp4(recording_final_avi, recording_mp4_path))
-            ok = false;
-    }
+        ok = mp4_recorder_mux_audio(recording_video_part,
+                                    recording_wav_path, recording_final_mp4);
+    if (ok && unlink(recording_video_part) != 0)
+        perror("MP4: unable to remove temporary video file");
     update_title();
     return ok;
 }
@@ -511,10 +491,10 @@ static void handle_events(void)
             {
                 if (recorder.active)
                 {
-                    if (!stop_recording()) fputs("AVI: recorder failed\n", stderr);
+                    if (!stop_recording()) fputs("MP4: recorder failed\n", stderr);
                 }
                 else if (!start_recording())
-                    fputs("AVI: cannot start recording\n", stderr);
+                    fputs("MP4: cannot start recording\n", stderr);
             }
             continue;
         }
@@ -573,13 +553,13 @@ static void load_fmsx(void *library)
 static void usage(const char *exe)
 {
     printf("Usage: %s [--core fmsx_libretro.so] [--bios BIOS_DIR] [--disk DISK.DSK]\n"
-           "       [--record VIDEO.avi] [--record-full-rate] [--no-mp4] [--screenshot SCREEN.png]\n"
+           "       [--record VIDEO.mp4] [--record-full-rate] [--screenshot SCREEN.png]\n"
            "       [--frames N] [--self-test-shortcuts] [--auto-aleste]\n"
            "       %s --self-test-window\n"
            "Ubuntu / WSLg standalone SDL2 MSX2+ emulator, without RetroArch.\n"
-           "Alt+Enter: fullscreen. Ctrl+Shift+R: FFV1 AVI, Ctrl+Shift+S: PNG.\n"
-           "AVI defaults to 25/30 fps; --record-full-rate keeps 50/60 fps.\n"
-           "Recording saves lossless AVI, PCM WAV, and MP4 H.264/AAC (use --no-mp4 to skip).\n"
+           "Alt+Enter: fullscreen. Ctrl+Shift+R: MP4 + WAV, Ctrl+Shift+S: PNG.\n"
+           "MP4 defaults to 25/30 fps; --record-full-rate keeps 50/60 fps.\n"
+           "Recording saves H.264/AAC MP4 with a separate lossless PCM WAV.\n"
            "--auto-aleste: press A, Enter, Enter at 1-second intervals,\n"
            "               record 60 seconds of emulated video and audio.\n"
            "MSX Pico: MSXPICO_SIM_MAPPER=nextor, MSXPICO_SIM_ROM=...,\n"
@@ -602,7 +582,6 @@ int main(int argc, char **argv)
         }
         if (!strcmp(argv[i], "--self-test-window")) { self_test_window = true; continue; }
         if (!strcmp(argv[i], "--record-full-rate")) { record_full_rate = true; continue; }
-        if (!strcmp(argv[i], "--no-mp4")) { mp4_preview = false; continue; }
         if (!strcmp(argv[i], "--self-test-shortcuts")) { self_test_shortcuts = true; continue; }
         if (!strcmp(argv[i], "--auto-aleste")) { auto_aleste = true; continue; }
         if (!strcmp(argv[i], "--screenshot") && i + 1 < argc)
@@ -624,9 +603,9 @@ int main(int argc, char **argv)
             const char *value = argv[++i];
             const size_t n = strlen(value);
             if (n < 5 || n >= sizeof recorder_path ||
-                strcmp(value + n - 4, ".avi"))
+                strcmp(value + n - 4, ".mp4"))
             {
-                fputs("AVI: --record requires a .avi output path\n", stderr);
+                fputs("MP4: --record requires a .mp4 output path\n", stderr);
                 return EXIT_FAILURE;
             }
             strcpy(recorder_path, value);
@@ -676,7 +655,8 @@ int main(int argc, char **argv)
             fputs("--auto-aleste cannot combine with --record, --frames or shortcut self-test\n", stderr);
             return EXIT_FAILURE;
         }
-        strcpy(recorder_path, "aleste-60s.avi");
+        strcpy(recorder_path, "aleste-60s.mp4");
+        auto_record = true; /* Include boot and all simulated keystrokes. */
     }
 
     if (!manual_bios) find_bundled_bios();
@@ -786,7 +766,7 @@ int main(int argc, char **argv)
     int title_hz = -1;
     while (!quitting)
     {
-        /* Two PNG snapshots and matching AVI/WAV via SDL hotkeys. */
+        /* Two PNG snapshots and matching MP4/WAV via SDL hotkeys. */
         if (self_test_shortcuts)
         {
             if (frames_executed == 6 || frames_executed == 16)
@@ -833,18 +813,9 @@ int main(int argc, char **argv)
             if (aleste_step == sizeof sequence / sizeof sequence[0] && !aleste_key_down)
             {
                 aleste_started_frame = frames_executed;
-                if (!start_recording())
-                {
-                    fputs("Aleste automation: failed to start AVI/WAV recording\n", stderr);
-                    recording_failed = true;
-                    quitting = true;
-                }
-                else
-                {
-                    aleste_record_started = true;
-                    fprintf(stderr, "Aleste automation: Enter sent; capturing 60 seconds at %u Hz\n",
-                            emulator_fps);
-                }
+                aleste_record_started = true;
+                fprintf(stderr, "Aleste automation: A, Enter, Enter sent; capturing 60 seconds more at %u Hz\n",
+                        emulator_fps);
             }
         }
         core.run();
@@ -877,13 +848,11 @@ int main(int argc, char **argv)
                         recorder_sequence == 1 &&
                         access("fmsx-screenshot-0001.png", R_OK) == 0 &&
                         access("fmsx-screenshot-0002.png", R_OK) == 0 &&
-                        access("fmsx-capture-0001.avi", R_OK) == 0 &&
+                        access("fmsx-capture-0001.mp4", R_OK) == 0 &&
                         access("fmsx-capture-0001.wav", R_OK) == 0 &&
-                        (!mp4_preview ||
-                         access("fmsx-capture-0001.mp4", R_OK) == 0) &&
                         !recording_failed && !screenshot_failed;
         if (!ok) recording_failed = true;
-        fprintf(stderr, "%s: SDL keyboard shortcuts (2 PNG + AVI + WAV/optional MP4)\n",
+        fprintf(stderr, "%s: SDL keyboard shortcuts (2 PNG + MP4 + WAV)\n",
                 ok ? "PASS" : "FAIL");
     }
     core.unload_game();
