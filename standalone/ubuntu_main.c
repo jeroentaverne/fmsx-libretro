@@ -60,6 +60,11 @@ static char recording_wav_path[4096];
 static unsigned recorder_sequence;
 static bool auto_record;
 static bool self_test_shortcuts;
+static bool auto_aleste;
+static bool aleste_record_started;
+static uint64_t aleste_started_frame;
+static unsigned aleste_step;
+static bool aleste_key_down;
 static uint64_t frame_limit;
 static uint64_t frames_executed;
 static bool screenshot_requested;
@@ -428,6 +433,16 @@ static bool stop_recording(void)
 
 /* Test the exact SDL shortcut paths without relying on a real keyboard.
  * No shortcut events are injected in normal emulation sessions. */
+/* Menu automation uses the same libretro keyboard path as physical SDL keys. */
+static void inject_msx_key(unsigned retro_key, bool down)
+{
+    if (retro_key >= RETROK_LAST) return;
+    key_states[retro_key] = down;
+    if (keyboard_callback.callback)
+        keyboard_callback.callback(down, retro_key,
+                                   retro_key >= 32 && retro_key < 127 ? retro_key : 0, 0);
+}
+
 static bool inject_capture_key(SDL_Keycode key)
 {
     SDL_Event event = {0};
@@ -530,12 +545,14 @@ static void usage(const char *exe)
 {
     printf("Usage: %s [--core fmsx_libretro.so] [--bios BIOS_DIR] [--disk DISK.DSK]\n"
            "       [--record VIDEO.avi] [--record-full-rate] [--screenshot SCREEN.png]\n"
-           "       [--frames N] [--self-test-shortcuts]\n"
+           "       [--frames N] [--self-test-shortcuts] [--auto-aleste]\n"
            "       %s --self-test-window\n"
            "Ubuntu / WSLg standalone SDL2 MSX2+ emulator, without RetroArch.\n"
            "Alt+Enter: fullscreen. Ctrl+Shift+R: FFV1 AVI, Ctrl+Shift+S: PNG.\n"
            "AVI defaults to 25/30 fps; --record-full-rate keeps 50/60 fps.\n"
            "AVI video requires ffmpeg; WAV audio saves alongside each AVI.\n"
+           "--auto-aleste: type ALESTE then Enter at 1-second intervals,\n"
+           "               record 60 seconds of emulated video and audio.\n"
            "MSX Pico: MSXPICO_SIM_MAPPER=nextor, MSXPICO_SIM_ROM=...,\n"
            "          MSXPICO_SIM_SD=/path/to/raw_sd_image.img.\n",
            exe, exe);
@@ -557,6 +574,7 @@ int main(int argc, char **argv)
         if (!strcmp(argv[i], "--self-test-window")) { self_test_window = true; continue; }
         if (!strcmp(argv[i], "--record-full-rate")) { record_full_rate = true; continue; }
         if (!strcmp(argv[i], "--self-test-shortcuts")) { self_test_shortcuts = true; continue; }
+        if (!strcmp(argv[i], "--auto-aleste")) { auto_aleste = true; continue; }
         if (!strcmp(argv[i], "--screenshot") && i + 1 < argc)
         {
             const char *name = argv[++i];
@@ -619,6 +637,16 @@ int main(int argc, char **argv)
         }
         usage(argv[0]);
         return EXIT_FAILURE;
+    }
+
+    if (auto_aleste)
+    {
+        if (self_test_shortcuts || auto_record || frame_limit)
+        {
+            fputs("--auto-aleste cannot combine with --record, --frames or shortcut self-test\n", stderr);
+            return EXIT_FAILURE;
+        }
+        strcpy(recorder_path, "aleste-60s.avi");
     }
 
     if (!manual_bios) find_bundled_bios();
@@ -741,8 +769,60 @@ int main(int argc, char **argv)
             }
         }
         handle_events();
+        /*
+         * Advance using emulated frame count rather than host wall time.
+         * Give the firmware menu five seconds to appear, then search by
+         * typing ALESTE and press Enter. A key is held for 100 ms and each
+         * next key starts one second later. Recording begins after Enter.
+         */
+        if (auto_aleste && !aleste_record_started)
+        {
+            static const unsigned sequence[] = {
+                RETROK_a, RETROK_l, RETROK_e, RETROK_s,
+                RETROK_t, RETROK_e, RETROK_RETURN
+            };
+            const uint64_t first = (uint64_t)emulator_fps * 5u;
+            const uint64_t interval = emulator_fps;
+            const uint64_t held = emulator_fps / 10u ?
+                                  emulator_fps / 10u : 1u;
+            if (frames_executed >= first && aleste_step < 7u)
+            {
+                const uint64_t elapsed = frames_executed - first;
+                const uint64_t start = (uint64_t)aleste_step * interval;
+                if (!aleste_key_down && elapsed >= start)
+                {
+                    inject_msx_key(sequence[aleste_step], true);
+                    aleste_key_down = true;
+                }
+                if (aleste_key_down && elapsed >= start + held)
+                {
+                    inject_msx_key(sequence[aleste_step], false);
+                    aleste_key_down = false;
+                    ++aleste_step;
+                }
+            }
+            if (aleste_step == 7u && !aleste_key_down)
+            {
+                aleste_started_frame = frames_executed;
+                if (!start_recording())
+                {
+                    fputs("Aleste automation: failed to start AVI/WAV recording\n", stderr);
+                    recording_failed = true;
+                    quitting = true;
+                }
+                else
+                {
+                    aleste_record_started = true;
+                    fprintf(stderr, "Aleste automation: Enter sent; capturing 60 seconds at %u Hz\n",
+                            emulator_fps);
+                }
+            }
+        }
         core.run();
         ++frames_executed;
+        if (auto_aleste && aleste_record_started &&
+            frames_executed - aleste_started_frame >= (uint64_t)emulator_fps * 60u)
+            quitting = true;
         if (frame_limit && frames_executed >= frame_limit) quitting = true;
         const int hz = core.cpu_frequency_hz ? core.cpu_frequency_hz() : 3579545;
         if (hz != title_hz)
