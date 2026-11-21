@@ -1059,7 +1059,7 @@ uint8_t InZ80(uint16_t Port)
   switch(Port)
   {
 
-case 0xF4: return(0xFF);                   /* MSX2+ port F4h: fixed FFh control test */
+case 0xF4: return(0x00);                   /* MSX2+ port F4h: forced 00h control test */
 case 0x90: return(0xFD);                   /* Printer READY signal */
 case 0xB5: return(RTCIn(RTCReg));          /* RTC registers        */
 
