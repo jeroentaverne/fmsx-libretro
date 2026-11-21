@@ -173,7 +173,7 @@ static bool environment(unsigned cmd, void *data)
             struct retro_variable *v = (struct retro_variable *)data;
             if (!v->key) return false;
             if (!strcmp(v->key, "fmsx_mode")) v->value = "MSX2";
-            else if (!strcmp(v->key, "fmsx_video_mode")) v->value = "PAL";
+            else if (!strcmp(v->key, "fmsx_video_mode")) v->value = "NTSC";
             else if (!strcmp(v->key, "fmsx_ram_pages")) v->value = "128KB";
             else return false;
             return true;
