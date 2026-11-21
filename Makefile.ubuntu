@@ -5,7 +5,7 @@ SDL_CFLAGS := $(shell sdl2-config --cflags)
 SDL_LIBS := $(shell sdl2-config --libs)
 .PHONY: all clean
 all: fmsx-ubuntu
-fmsx-ubuntu: standalone/ubuntu_main.c standalone/avi_recorder.c standalone/avi_recorder.h libretro.h
-	$(CC) -std=c11 $(CFLAGS) $(SDL_CFLAGS) -I. -o $@ standalone/ubuntu_main.c standalone/avi_recorder.c $(SDL_LIBS) -ldl
+fmsx-ubuntu: standalone/ubuntu_main.c standalone/avi_recorder.c standalone/avi_recorder.h standalone/png_screenshot.c standalone/png_screenshot.h libretro.h
+	$(CC) -std=c11 $(CFLAGS) $(SDL_CFLAGS) -I. -o $@ standalone/ubuntu_main.c standalone/avi_recorder.c standalone/png_screenshot.c $(SDL_LIBS) -ldl -lz
 clean:
 	rm -f fmsx-ubuntu
