@@ -6,6 +6,7 @@
            msxpico_fmsx_claim_port; msxpico_fmsx_attached;
            msxpico_fmsx_sd_commands; msxpico_fmsx_sd_reads;
            msxpico_fmsx_sd_command_count;
+           msxpico_fmsx_sd_rx_bytes; msxpico_fmsx_sd_pending_bytes;
            RAMPages; VRAMPages;
            fmsx_cpu_frequency_hz; fmsx_z80_pc; HPeriod; VPeriod;
            sim_io_write_count; sim_io_last_port; sim_io_last_data;
