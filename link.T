@@ -4,6 +4,9 @@
            PSL; SSL; SSLReg; EnWrite; RAM; Mode;
            msxpico_fmsx_attach_rom; msxpico_fmsx_stop;
            msxpico_fmsx_menu_copy;
+           msxpico_fmsx_menu_guest_diagnostics;
+           msxpico_fmsx_menu_header_reads;
+           msxpico_fmsx_menu_instruction_reads;
            msxpico_fmsx_claim_port; msxpico_fmsx_attached;
            msxpico_fmsx_sd_commands; msxpico_fmsx_sd_reads;
            msxpico_fmsx_sd_command_count;
