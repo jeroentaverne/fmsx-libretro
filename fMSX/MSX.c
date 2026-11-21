@@ -200,7 +200,14 @@ static const uint16_t BIOSPatches[] =
 
 /** Cartridge map, by primary and secondary slots ************/
 static const uint8_t CartMap[4][4] =
+#ifdef MSXPICO_FMSX
+/* NMS8250: primary 1/2 cartridges, 3-0 SUB-ROM, 3-1 free,
+ * 3-2 RAM mapper, 3-3 disk ROM. Reserve the optional internal
+ * cartridge index 2 for the actually free 3-1, never 3-0. */
+{ { 255,3,4,5 },{ 0,0,0,0 },{ 1,1,1,1 },{ 255,2,255,255 } };
+#else
 { { 255,3,4,5 },{ 0,0,0,0 },{ 1,1,1,1 },{ 2,255,255,255 } };
+#endif
 
 /** Screen Mode Handlers [number of screens + 1] *************/
 void (*RefreshLine[MAXSCREEN+2])(uint8_t Y) =
@@ -561,28 +568,33 @@ int StartMSX(int NewMode,int NewRAMPages,int NewVRAMPages)
   /* Try loading Kanji alphabet ROM */
   if((Kanji = LoadROM("KANJI.ROM",0x20000,0))) { }
 
-  /* Try loading RS232 support ROM to slot */
+#ifndef MSXPICO_FMSX
+  /* Generic fMSX machine RS232 occupies 3-3, but Philips NMS8250 uses
+   * this slot for the disk ROM; never replace it with RS232.ROM. */
   if((P=LoadROM("RS232.ROM",0x4000,0)))
   {
     MemMap[3][3][2]=P;
     MemMap[3][3][3]=P+0x2000;
   }
+#endif
 
   /* Start loading system cartridges */
   J=MAXCARTS;
 
-  /* If MSX2 or better and DiskROM present...  */
-  /* ...try loading MSXDOS2 cartridge into 3:0 */
+#ifndef MSXPICO_FMSX
+  /* Generic fMSX system cartridges must not run on NMS8250: PAINTER.ROM
+   * would overwrite the Philips 3-0 SUB-ROM, and MSXDOS2 is not in the
+   * original NMS8250 internal layout. The real 3-3 DISK.ROM stays intact. */
   if(!MODEL(MSX_MSX1)&&OPTION(MSX_MSXDOS2)&&(MemMap[3][1][2]!=EmptyRAM)&&!ROMData[2])
     if(LoadCart("MSXDOS2.ROM",2,MAP_GEN16))
       SetMegaROM(2,0,1,ROMMask[J]-1,ROMMask[J]);
 
-  /* If MSX2 or better, load PAINTER cartridge */
   if(!MODEL(MSX_MSX1))
   {
     for(;(J<MAXSLOTS)&&ROMData[J];++J);
     if((J<MAXSLOTS)&&LoadCart("PAINTER.ROM",J,0)) ++J;
   }
+#endif
 
   /* Load Konami GameMaster2/GameMaster cartridges */
   J=0; // by default load GM2&GM in slot A
@@ -1034,6 +1046,15 @@ uint8_t RdZ80(uint16_t address)
   {
     switch (address)
     {
+#ifdef MSXPICO_FMSX
+      /* NMS8250 hardware mirrors its WD2793 control registers in every
+       * 16K page of slot 3-3, even though disk ROM exists in page 1 only. */
+      case 0x3FF8: case 0xFFF8: return Read1793(&FDC,0);
+      case 0x3FF9: case 0xFFF9: return Read1793(&FDC,1);
+      case 0x3FFA: case 0xFFFA: return Read1793(&FDC,2);
+      case 0x3FFB: case 0xFFFB: return Read1793(&FDC,3);
+      case 0x3FFF: case 0xFFFF: return Read1793(&FDC,WD1793_READY);
+#endif
       /* Standard   MSX-DOS      Arabic       SV738 */
       case 0x7FF8: case 0xBFF8: case 0x7F80: case 0x7FB8: /* STATUS */
       case 0x7FF9: case 0xBFF9: case 0x7F81: case 0x7FB9: /* TRACK */
@@ -1082,6 +1103,20 @@ void WrZ80(uint16_t address, uint8_t value)
   {
     switch (address)
     {
+#ifdef MSXPICO_FMSX
+      case 0x3FF8: case 0xFFF8: Write1793(&FDC,0,value); return;
+      case 0x3FF9: case 0xFFF9: Write1793(&FDC,1,value); return;
+      case 0x3FFA: case 0xFFFA: Write1793(&FDC,2,value); return;
+      case 0x3FFB: case 0xFFFB: Write1793(&FDC,3,value); return;
+      case 0x3FFC: case 0xFFFC: /* Side select */
+        Write1793(&FDC,WD1793_SYSTEM,
+                  FDC.Drive | S_DENSITY | (value & 0x01 ? 0 : S_SIDE));
+        return;
+      case 0x3FFD: case 0xFFFD: /* Drive select */
+        Write1793(&FDC,WD1793_SYSTEM,
+                  (value & 0x01) | S_DENSITY | (FDC.Side ? 0 : S_SIDE));
+        return;
+#endif
       /* Standard   MSX-DOS       Arabic       SV738 */
       case 0x7FF8: case 0xBFF8: case 0x7F80: case 0x7FB8: /* COMMAND */
       case 0x7FF9: case 0xBFF9: case 0x7F81: case 0x7FB9: /* TRACK */
