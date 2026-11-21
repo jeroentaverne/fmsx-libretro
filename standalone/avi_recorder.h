@@ -1,6 +1,6 @@
-/* Every fMSX frame is preserved by FFV1 inside an AVI container.
- * No lossy codecs, dropped frames, or SDL framebuffer screenshots.
- * The ffmpeg executable is optional until recording is requested. */
+/* FFV1 is lossless for each selected image. Default video cadence
+ * decimates native 50/60 Hz to 25/30 Hz; full-rate remains selectable.
+ * All stereo PCM audio is recorded at the original 48 kHz sample rate. */
 #ifndef MSXPICO_AVI_RECORDER_H
 #define MSXPICO_AVI_RECORDER_H
 #include <stdbool.h>
@@ -16,13 +16,16 @@ typedef struct avi_recorder
     pid_t encoder_pid;
     uint8_t *canvas;
     uint64_t frames_written;
-    unsigned fps;
+    uint64_t input_frames;
+    unsigned fps;           /* Output AVI frame rate: 25, 30, 50 or 60 */
+    unsigned source_fps;    /* fMSX callback cadence: 50 or 60 */
+    unsigned decimation;    /* Source frames per encoded frame: 1 or 2 */
     bool active;
     bool have_frame;
 } avi_recorder_t;
 
 bool avi_recorder_start(avi_recorder_t *rec, const char *filename,
-                        unsigned frames_per_second);
+                        unsigned source_fps, unsigned output_fps);
 bool avi_recorder_frame(avi_recorder_t *rec, const void *rgb565,
                         unsigned width, unsigned height, size_t pitch);
 bool avi_recorder_stop(avi_recorder_t *rec);
