@@ -497,10 +497,6 @@ int ExecZ80(Z80 *R,int RunCycles)
         if(!DebugZ80(R)) return(R->ICount);
 #endif
 
-  #ifdef MSXPICO_FMSX
-    /* Capture the full instruction cost, including extra prefix cycles. */
-    const int tstates_before = R->ICount;
-#endif
     /* Read opcode and count cycles */
       I=OpZ80(R->PC.W++);
       R->ICount-=Cycles[I];
@@ -621,6 +617,10 @@ uint16_t RunZ80(Z80 *R)
     }
 #endif
 
+#ifdef MSXPICO_FMSX
+    /* Observe emulated instruction cycles without changing CPU scheduling. */
+    const int tstates_before = R->ICount;
+#endif
     /* Read opcode and count cycles */
     I=OpZ80(R->PC.W++);
     R->ICount-=Cycles[I];
