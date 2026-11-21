@@ -8,7 +8,7 @@
 #include <stddef.h>
 #include <sys/types.h>
 
-enum { AVI_WIDTH = 544, AVI_HEIGHT = 480 };
+enum { AVI_WIDTH = 640, AVI_HEIGHT = 480 };
 
 typedef struct avi_recorder
 {
