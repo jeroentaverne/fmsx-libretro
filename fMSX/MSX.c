@@ -14,6 +14,9 @@
 /*************************************************************/
 
 #include "MSX.h"
+#ifdef MSXPICO_FMSX
+#include "msxpico_fmsx_adapter.h"
+#endif
 #include "Sound.h"
 #include "Floppy.h"
 #include "SHA1.h"
@@ -37,6 +40,13 @@
 #endif
 
 extern retro_log_printf_t log_cb;
+#ifdef MSXPICO_FMSX
+/* Diagnostic and timer observers; keep original Z80/VDP timing unchanged. */
+int fmsx_cpu_frequency_hz(void) { return CPU_CLOCK; }
+uint16_t fmsx_z80_pc(void) { return CPU.PC.W; }
+uint16_t fmsx_z80_bc(void) { return CPU.BC.W; }
+uint16_t fmsx_z80_sp(void) { return CPU.SP.W; }
+#endif
 
 #define RGB2INT(R,G,B)    ((B)|((int)(G)<<8)|((int)(R)<<16))
 
@@ -963,6 +973,12 @@ int ResetMSX(int NewMode,int NewRAMPages,int NewVRAMPages)
 /*************************************************************/
 uint8_t RdZ80(uint16_t A)
 {
+#ifdef MSXPICO_FMSX
+  /* Only slot-1 cartridge memory is eligible. All other reads retain
+   * the bit-for-bit original NMS8245 BIOS/slot implementation. */
+  uint8_t value;
+  if (msxpico_fmsx_mem_read(A, &value)) return value;
+#endif
   uint8_t J,PS,SS,I;
 
   /* Secondary slot selector */
@@ -1007,6 +1023,9 @@ uint8_t RdZ80(uint16_t A)
 /*************************************************************/
 void WrZ80(uint16_t A,uint8_t V)
 {
+#ifdef MSXPICO_FMSX
+  if (msxpico_fmsx_mem_write(A, V)) return;
+#endif
   /* Secondary slot selector */
   if(A==0xFFFF) { SSlot(V);return; }
 
