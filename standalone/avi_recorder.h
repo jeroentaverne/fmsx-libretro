@@ -34,4 +34,6 @@ bool avi_recorder_stop(avi_recorder_t *rec);
  * Never deletes source files, so a failed mux can be recovered. */
 bool avi_recorder_mux_audio(const char *video_only, const char *wav,
                             const char *output);
+/* H.264/AAC playback copy, preserving original lossless AVI and WAV. */
+bool avi_recorder_export_mp4(const char *avi, const char *mp4);
 #endif
