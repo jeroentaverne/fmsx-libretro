@@ -1316,9 +1316,10 @@ bool retro_load_game(const struct retro_game_info *info)
    SetChannels(255/MAXCHANNELS, (1<<MAXCHANNELS)-1);
 
 #ifdef MSXPICO_FMSX
-   /* Attach the slot-1 memory cartridge before the BIOS scans ROM headers.
-    * Native fMSX I/O (VDP/PSG/PPI/FDC) is untouched; no Pico I/O forwarding. */
-   if (getenv("MSXPICO_SIM_ROM") && !msxpico_fmsx_attach_from_env())
+   /* Start the UNMODIFIED Pico firmware Core0/Core1 before Z80 BIOS
+    * execution. A complete 16 MiB flash image is mandatory; do not
+    * silently substitute a host ROM/mapper or generated menu. */
+   if (getenv("MSXPICO_SIM_FLASH") && !msxpico_fmsx_attach_from_env())
       return false;
 #endif
    StartMSX(Mode,RAMPages,VRAMPages);

@@ -2,25 +2,16 @@
    global: retro_*;
            RdZ80; WrZ80; InZ80; OutZ80;
            PSL; SSL; SSLReg; EnWrite; RAM; Mode;
-           msxpico_fmsx_attach_rom; msxpico_fmsx_stop;
-           msxpico_fmsx_menu_copy;
-           msxpico_fmsx_menu_guest_diagnostics;
-           msxpico_fmsx_menu_header_reads;
-           msxpico_fmsx_menu_instruction_reads;
-           msxpico_fmsx_claim_port; msxpico_fmsx_attached;
-           msxpico_fmsx_sd_commands; msxpico_fmsx_sd_reads;
-           msxpico_fmsx_sd_command_count;
-           msxpico_fmsx_sd_rx_bytes; msxpico_fmsx_sd_pending_bytes;
-           msxpico_fmsx_sd_timer_writes; msxpico_fmsx_sd_timer_reads;
-           msxpico_fmsx_sd_timer_zeros; msxpico_fmsx_sd_state;
-           msxpico_fmsx_fatfs_mount; msxpico_fmsx_fatfs_list_dir;
-           msxpico_fmsx_fatfs_file_size;
-           msxpico_fmsx_fatfs_file_read;
+           msxpico_fmsx_attach_from_env; msxpico_fmsx_stop;
+           msxpico_fmsx_attached;
+           msxpico_fmsx_mem_read; msxpico_fmsx_mem_write;
+           msxpico_fmsx_io_read; msxpico_fmsx_io_write;
            RAMPages; VRAMPages;
            fmsx_cpu_frequency_hz; fmsx_z80_pc; fmsx_z80_bc; fmsx_z80_sp;
            fmsx_z80_cycles; HPeriod; VPeriod;
            fmsx_pico_ntsc_locked;
-           sim_io_write_count; sim_io_last_port; sim_io_last_data;
+           /* No simulator-side mapper/debug globals: the native firmware
+            * receives every bus transaction directly. */
    local: *;
 };
 

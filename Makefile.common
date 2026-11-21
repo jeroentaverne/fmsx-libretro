@@ -63,31 +63,9 @@ ifndef MSXPICO_SW_ROOT
 $(error MSXPICO_FMSX=1 requires MSXPICO_SW_ROOT=/absolute/path/to/msxpico_sw)
 endif
 MSXPICO_HOST_ROOT := $(abspath $(MSXPICO_SW_ROOT))
-MSXPICO_CORE1_C ?= $(MSXPICO_HOST_ROOT)/build-host/generated/core1_bus_extract.c
-COREDEFINES += -DMSXPICO_FMSX=1 -DMSXPICO_HOST_FATFS=1 -DRP2350_COMPILE=1 -DINT_PIN=0
-INCFLAGS += -I$(MSXPICO_HOST_ROOT)/simulator/fmsx \
-            -I$(MSXPICO_HOST_ROOT)/simulator/host \
-            -I$(MSXPICO_HOST_ROOT)/simulator/host/include \
-            -I$(MSXPICO_HOST_ROOT)/fatfs/ff15/source \
-            -I$(MSXPICO_HOST_ROOT)/fatfs/include \
-            -I$(MSXPICO_HOST_ROOT)
-SOURCES_C += $(MSXPICO_HOST_ROOT)/simulator/fmsx/msxpico_fmsx_adapter.c \
-             $(MSXPICO_HOST_ROOT)/simulator/host/bus_host.c \
-             $(MSXPICO_HOST_ROOT)/simulator/host/frame_pacer.c \
-             $(MSXPICO_HOST_ROOT)/simulator/host/sd_spi_host.c \
-             $(MSXPICO_HOST_ROOT)/simulator/host/fatfs_spi_host.c \
-             $(MSXPICO_HOST_ROOT)/fatfs/ff15/source/ff.c \
-             $(MSXPICO_HOST_ROOT)/fatfs/ff15/source/ffunicode.c \
-             $(MSXPICO_HOST_ROOT)/simulator/host/pico_audio_host.c \
-             $(MSXPICO_HOST_ROOT)/simulator/host/wifi_unapi_host.c \
-             $(MSXPICO_HOST_ROOT)/emulators/psg/psg.c \
-             $(MSXPICO_HOST_ROOT)/emulators/psg/tone_noise.c \
-             $(MSXPICO_HOST_ROOT)/emulators/psg/dc_blocker.c \
-             $(MSXPICO_HOST_ROOT)/emulators/psg/audio_mixer.c \
-             $(MSXPICO_HOST_ROOT)/emulators/psg/hw_tables.c \
-             $(MSXPICO_HOST_ROOT)/emu2413.c \
-             $(MSXPICO_HOST_ROOT)/emu2212.c \
-             $(MSXPICO_CORE1_C)
-CFLAGS += -pthread -D_POSIX_C_SOURCE=200809L
-LDFLAGS += -pthread -lssl -lcrypto
+COREDEFINES += -DMSXPICO_FMSX=1
+INCFLAGS += -I$(MSXPICO_HOST_ROOT)/simulator/fmsx
+SOURCES_C += $(MSXPICO_HOST_ROOT)/simulator/fmsx/msxpico_fmsx_adapter.c
+CFLAGS += -D_POSIX_C_SOURCE=200809L
+LDFLAGS += -ldl -pthread
 endif

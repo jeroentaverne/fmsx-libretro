@@ -1076,7 +1076,11 @@ void WrZ80(uint16_t A,uint8_t V)
 /** Z80 emulation calls this function to read a uint8_t from   **/
 /** a given I/O port.                                       **/
 /*************************************************************/
+#ifdef MSXPICO_FMSX
+static uint8_t InZ80Onboard(uint16_t Port)
+#else
 uint8_t InZ80(uint16_t Port)
+#endif
 {
   /* MSX only uses 256 IO ports */
   Port&=0xFF;
@@ -1220,6 +1224,18 @@ case 0xD4: /* FDC IRQ/DRQ */
   /* Return NORAM for non-existing ports */
   return(NORAM);
 }
+#ifdef MSXPICO_FMSX
+/* Both the MSX's own chips and the physical Pico cartridge see an IN.
+ * They share the 8-bit data bus with a wired-AND. High-impedance Pico
+ * reads leave the native fMSX BIOS/PSG/PPI/VDP value untouched. */
+uint8_t InZ80(uint16_t Port)
+{
+  uint8_t onboard=InZ80Onboard(Port);
+  uint8_t external;
+  if(msxpico_fmsx_io_read(Port,&external))onboard&=external;
+  return onboard;
+}
+#endif
 
 /** OutZ80() *************************************************/
 /** Z80 emulation calls this function to write uint8_t V to a  **/
@@ -1231,10 +1247,9 @@ void OutZ80(uint16_t Port,uint8_t Value)
 
   Port&=0xFF;
 #ifdef MSXPICO_FMSX
-  /* Forward PSG/OPLL data to Pico, but retain native fMSX I/O register
-   * state and PSG joystick reads. Pico audio works with cartridge I/O off. */
-  if(Port==0xA0 || Port==0xA1 || Port==0x7C || Port==0x7D)
-    msxpico_fmsx_audio_io_write((uint8_t)Port,Value);
+  /* Every Z80 OUT broadcasts to both internal MSX chips and Pico firmware.
+   * No guessed device-port list and no second PSG synthesizer. */
+  (void)msxpico_fmsx_io_write(Port,Value);
 #endif
   switch(Port)
   {
