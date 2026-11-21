@@ -7,6 +7,8 @@
            msxpico_fmsx_sd_commands; msxpico_fmsx_sd_reads;
            msxpico_fmsx_sd_command_count;
            msxpico_fmsx_sd_rx_bytes; msxpico_fmsx_sd_pending_bytes;
+           msxpico_fmsx_sd_timer_writes; msxpico_fmsx_sd_timer_reads;
+           msxpico_fmsx_sd_timer_zeros; msxpico_fmsx_sd_state;
            msxpico_fmsx_fatfs_mount; msxpico_fmsx_fatfs_file_size;
            msxpico_fmsx_fatfs_file_read;
            RAMPages; VRAMPages;
