@@ -26,4 +26,9 @@ bool avi_recorder_start(avi_recorder_t *rec, const char *filename,
 bool avi_recorder_frame(avi_recorder_t *rec, const void *rgb565,
                         unsigned width, unsigned height, size_t pitch);
 bool avi_recorder_stop(avi_recorder_t *rec);
+/* Losslessly stream-copy FFV1 video and mux the WAV audio into AVI.
+ * video_only and wav are complete files; output must not exist.
+ * Never deletes source files, so a failed mux can be recovered. */
+bool avi_recorder_mux_audio(const char *video_only, const char *wav,
+                            const char *output);
 #endif
