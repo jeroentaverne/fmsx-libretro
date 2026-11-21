@@ -52,6 +52,9 @@ static unsigned recorder_sample_rate = 48000;
 static bool media_capture_failed;
 static unsigned recorder_fps = 60;
 static char recorder_path[4096];
+static char recording_final_avi[4096];
+static char recording_video_part[4096];
+static char recording_wav_path[4096];
 static unsigned recorder_sequence;
 static bool auto_record;
 static bool self_test_shortcuts;
@@ -371,20 +374,29 @@ static bool start_recording(void)
 
     const size_t n = strlen(filename);
     if (n < 4 || strcmp(filename + n - 4, ".avi")) return false;
-    char wav_path[4096];
+    /* Write temporary FFV1 video while WAV gets the exact audio samples;
+     * after recording, stream-copy both into the final AVI with PCM audio.
+     * Final AVI and WAV are distinct outputs with the same base filename. */
+    char wav_path[4096], video_part[4096];
+    if (snprintf(video_part, sizeof video_part, "%.*s.video-only.part.avi",
+                 (int)(n - 4), filename) >= (int)sizeof video_part)
+        return false;
     memcpy(wav_path, filename, n + 1);
     memcpy(wav_path + n - 4, ".wav", 5);
+    if (access(filename, F_OK) == 0 || access(video_part, F_OK) == 0)
+        return false;
 
-    /* Audio starts alongside video, not at SDL's playback queue. If
-     * either output cannot start, do not silently create video-only AVI. */
     if (!wav_recorder_start(&audio_capture, wav_path, recorder_sample_rate))
         return false;
-    if (!avi_recorder_start(&recorder, filename, recorder_fps))
+    if (!avi_recorder_start(&recorder, video_part, recorder_fps))
     {
         (void)wav_recorder_stop(&audio_capture);
-        (void)unlink(wav_path);  /* WAV file was created exclusively here. */
+        (void)unlink(wav_path); /* Created exclusively during this attempt. */
         return false;
     }
+    strcpy(recording_final_avi, filename);
+    strcpy(recording_video_part, video_part);
+    strcpy(recording_wav_path, wav_path);
     if (recorder_path[0]) ++recorder_sequence;
     update_title();
     return true;
@@ -392,12 +404,23 @@ static bool start_recording(void)
 
 static bool stop_recording(void)
 {
-    /* Both outputs always get finalized, even if the other fails. */
+    /* First finalize the original video and WAV streams. No audio or
+     * video samples are changed when the two streams are muxed below. */
     const bool video = !recorder.active || avi_recorder_stop(&recorder);
     const bool audio = !audio_capture.active ||
                        wav_recorder_stop(&audio_capture);
+    bool ok = video && audio;
+    if (ok)
+        ok = avi_recorder_mux_audio(recording_video_part,
+                                    recording_wav_path, recording_final_avi);
+    if (ok)
+    {
+        /* Keep both final .avi (video+audio) and .wav (audio only). */
+        if (unlink(recording_video_part) != 0)
+            perror("AVI: unable to remove temporary video file");
+    }
     update_title();
-    return video && audio;
+    return ok;
 }
 
 static void handle_events(void)
