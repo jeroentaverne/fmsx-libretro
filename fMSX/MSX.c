@@ -3521,3 +3521,13 @@ unsigned int LoadState(unsigned char *Buf,unsigned int MaxSize)
   /* Return amount of data read */
   return(Size);
 }
+
+#ifdef MSXPICO_FMSX
+/* Host integration regression probe. Checks actual VDP/CPU mode, not
+ * only the framerate advertised to the recording frontend. */
+int fmsx_pico_ntsc_locked(void)
+{
+  return !(VDP[9] & 0x02) && !(Mode & MSX_PAL)
+      && VPeriod == VPERIOD_NTSC/6 && !PALVideo;
+}
+#endif
