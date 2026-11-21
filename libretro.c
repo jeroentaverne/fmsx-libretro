@@ -1726,7 +1726,19 @@ void retro_run(void)
    handle_tape_autotype();
 
    RunZ80(&CPU);
+#ifdef MSXPICO_FMSX
+   /* Exclusively Pico-produced audio. Never render fMSX's native sound mix.
+    * At fixed 60 Hz, 48 kHz yields exactly 800 stereo frames/callback. */
+   {
+      static int16_t pico_pcm[2 * (SND_RATE / 50)];
+      const unsigned sample_frames = SND_RATE / fps;
+      msxpico_fmsx_render_audio(pico_pcm, sample_frames);
+      if (audio_batch_cb)
+         audio_batch_cb(pico_pcm, sample_frames);
+   }
+#else
    RenderAndPlayAudio(SND_RATE / fps);
+#endif
 
    fflush(stdout);
 
