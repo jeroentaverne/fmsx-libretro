@@ -60,11 +60,21 @@ static void find_bundled_pico_media(void)
     if (!end) return;
     *end = 0;
     char rom[4096], sd[4096];
-    if (snprintf(rom, sizeof rom, "%s/ROMs/sdmapper_one_drive.rom", executable)
-        >= (int)sizeof rom) return;
+    /* Nextor 3 is the preferred bundled cartridge. Keep the older
+     * Nextor 2 cartridge as a fallback for existing installations. */
+    const char *const rom_names[] = {
+        "sdmapper_select.rom", "sdmapper_one_drive.rom"
+    };
     if (snprintf(sd, sizeof sd, "%s/virtual_sd.img", executable)
-        >= (int)sizeof sd) return;
-    if (access(rom, R_OK) || access(sd, R_OK | W_OK)) return;
+        >= (int)sizeof sd || access(sd, R_OK | W_OK)) return;
+    bool found = false;
+    for (size_t i = 0; i < sizeof rom_names / sizeof rom_names[0]; ++i)
+    {
+        if (snprintf(rom, sizeof rom, "%s/ROMs/%s", executable, rom_names[i])
+            >= (int)sizeof rom) continue;
+        if (!access(rom, R_OK)) { found = true; break; }
+    }
+    if (!found) return;
     (void)setenv("MSXPICO_SIM_MAPPER", "nextor", 0);
     (void)setenv("MSXPICO_SIM_ROM", rom, 0);
     (void)setenv("MSXPICO_SIM_SD", sd, 0);
