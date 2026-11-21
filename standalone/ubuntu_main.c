@@ -50,7 +50,9 @@ static avi_recorder_t recorder;
 static wav_recorder_t audio_capture;
 static unsigned recorder_sample_rate = 48000;
 static bool media_capture_failed;
-static unsigned recorder_fps = 60;
+static unsigned recorder_fps = 30;
+static unsigned emulator_fps = 60;
+static bool record_full_rate;
 static char recorder_path[4096];
 static char recording_final_avi[4096];
 static char recording_video_part[4096];
@@ -388,7 +390,8 @@ static bool start_recording(void)
 
     if (!wav_recorder_start(&audio_capture, wav_path, recorder_sample_rate))
         return false;
-    if (!avi_recorder_start(&recorder, video_part, recorder_fps))
+    if (!avi_recorder_start(&recorder, video_part,
+                            emulator_fps, recorder_fps))
     {
         (void)wav_recorder_stop(&audio_capture);
         (void)unlink(wav_path); /* Created exclusively during this attempt. */
@@ -526,10 +529,12 @@ static void load_fmsx(void *library)
 static void usage(const char *exe)
 {
     printf("Usage: %s [--core fmsx_libretro.so] [--bios BIOS_DIR] [--disk DISK.DSK]\n"
-           "       [--record VIDEO.avi] [--screenshot SCREEN.png] [--frames N] [--self-test-shortcuts]\n"
+           "       [--record VIDEO.avi] [--record-full-rate] [--screenshot SCREEN.png]\n"
+           "       [--frames N] [--self-test-shortcuts]\n"
            "       %s --self-test-window\n"
            "Ubuntu / WSLg standalone SDL2 MSX2+ emulator, without RetroArch.\n"
            "Alt+Enter: fullscreen. Ctrl+Shift+R: FFV1 AVI, Ctrl+Shift+S: PNG.\n"
+           "AVI defaults to 25/30 fps; --record-full-rate keeps 50/60 fps.\n"
            "AVI video requires ffmpeg; WAV audio saves alongside each AVI.\n"
            "MSX Pico: MSXPICO_SIM_MAPPER=nextor, MSXPICO_SIM_ROM=...,\n"
            "          MSXPICO_SIM_SD=/path/to/raw_sd_image.img.\n",
@@ -550,6 +555,7 @@ int main(int argc, char **argv)
             return EXIT_SUCCESS;
         }
         if (!strcmp(argv[i], "--self-test-window")) { self_test_window = true; continue; }
+        if (!strcmp(argv[i], "--record-full-rate")) { record_full_rate = true; continue; }
         if (!strcmp(argv[i], "--self-test-shortcuts")) { self_test_shortcuts = true; continue; }
         if (!strcmp(argv[i], "--screenshot") && i + 1 < argc)
         {
@@ -688,7 +694,8 @@ int main(int argc, char **argv)
     struct retro_system_av_info av = {0};
     core.get_system_av_info(&av);
     const double fps = av.timing.fps > 0 ? av.timing.fps : 60.0;
-    recorder_fps = fps <= 55.0 ? 50 : 60;
+    emulator_fps = fps <= 55.0 ? 50 : 60;
+    recorder_fps = record_full_rate ? emulator_fps : emulator_fps / 2;
     recorder_sample_rate = (unsigned)(av.timing.sample_rate + 0.5);
     if (recorder_sample_rate < 8000 || recorder_sample_rate > 192000)
         recorder_sample_rate = 48000;
