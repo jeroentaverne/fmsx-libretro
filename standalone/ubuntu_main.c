@@ -9,6 +9,7 @@
 #define _POSIX_C_SOURCE 200809L
 #include "libretro.h"
 #include "avi_recorder.h"
+#include "png_screenshot.h"
 #include <SDL2/SDL.h>
 #include <dlfcn.h>
 #include <stdbool.h>
@@ -51,6 +52,10 @@ static unsigned recorder_sequence;
 static bool auto_record;
 static uint64_t frame_limit;
 static uint64_t frames_executed;
+static bool screenshot_requested;
+static bool screenshot_failed;
+static char screenshot_path[4096];
+static unsigned screenshot_sequence;
 
 /* The fork ships its original BIOS files. Locate them relative to the
  * executable, never requiring an external BIOS download or RetroArch. */
@@ -175,6 +180,38 @@ static void video_frame(const void *data, unsigned width,
         fputs("AVI: encoder failed while writing video frame\n", stderr);
         quitting = true;
         return;
+    }
+    if (screenshot_requested && data && width && height)
+    {
+        char filename[4096];
+        bool name_ready = false;
+        if (screenshot_path[0])
+        {
+            strcpy(filename, screenshot_path);
+            screenshot_path[0] = 0; /* Later hotkeys use numbered filenames. */
+            name_ready = true;
+        }
+        else
+        {
+            do
+            {
+                if (++screenshot_sequence > 9999) break;
+                snprintf(filename, sizeof filename, "fmsx-screenshot-%04u.png",
+                         screenshot_sequence);
+                name_ready = true;
+            } while (access(filename, F_OK) == 0);
+            if (screenshot_sequence > 9999) name_ready = false;
+        }
+        const bool ok = name_ready &&
+            fmsx_write_png(filename, data, width, height, pitch);
+        if (ok)
+            fprintf(stderr, "PNG: saved %s (%ux%u)\n", filename, width, height);
+        else
+        {
+            fputs("PNG: screenshot failed\n", stderr);
+            screenshot_failed = true;
+        }
+        screenshot_requested = false;
     }
     if (!renderer || !data || !width || !height) return;
     if (!texture || width != texture_width || height != texture_height)
@@ -347,6 +384,11 @@ static void handle_events(void)
         const bool down = event.type == SDL_KEYDOWN;
         const SDL_Keycode key = event.key.keysym.sym;
         const SDL_Keymod mods = (SDL_Keymod)event.key.keysym.mod;
+        if (key == SDLK_s && (mods & KMOD_CTRL) && (mods & KMOD_SHIFT))
+        {
+            if (down && !event.key.repeat) screenshot_requested = true;
+            continue;
+        }
         if (key == SDLK_r && (mods & KMOD_CTRL) && (mods & KMOD_SHIFT))
         {
             if (down && !event.key.repeat)
@@ -415,10 +457,10 @@ static void load_fmsx(void *library)
 static void usage(const char *exe)
 {
     printf("Usage: %s [--core fmsx_libretro.so] [--bios BIOS_DIR] [--disk DISK.DSK]\n"
-           "       [--record VIDEO.avi] [--frames N]\n"
+           "       [--record VIDEO.avi] [--screenshot SCREEN.png] [--frames N]\n"
            "       %s --self-test-window\n"
            "Ubuntu / WSLg standalone SDL2 MSX2+ emulator, without RetroArch.\n"
-           "Alt+Enter: fullscreen. Ctrl+Shift+R: toggle lossless FFV1 AVI capture.\n"
+           "Alt+Enter: fullscreen. Ctrl+Shift+R: FFV1 AVI, Ctrl+Shift+S: PNG.\n"
            "AVI recording requires ffmpeg: sudo apt install ffmpeg\n"
            "MSX Pico: MSXPICO_SIM_MAPPER=nextor, MSXPICO_SIM_ROM=...,\n"
            "          MSXPICO_SIM_SD=/path/to/raw_sd_image.img.\n",
@@ -439,6 +481,20 @@ int main(int argc, char **argv)
             return EXIT_SUCCESS;
         }
         if (!strcmp(argv[i], "--self-test-window")) { self_test_window = true; continue; }
+        if (!strcmp(argv[i], "--screenshot") && i + 1 < argc)
+        {
+            const char *name = argv[++i];
+            const size_t n = strlen(name);
+            if (n < 5 || n >= sizeof screenshot_path ||
+                strcmp(name + n - 4, ".png"))
+            {
+                fputs("PNG: --screenshot requires a .png output path\n", stderr);
+                return EXIT_FAILURE;
+            }
+            strcpy(screenshot_path, name);
+            screenshot_requested = true;
+            continue;
+        }
         if (!strcmp(argv[i], "--record") && i + 1 < argc)
         {
             const char *value = argv[++i];
@@ -604,5 +660,5 @@ int main(int argc, char **argv)
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
     SDL_Quit();
-    return recording_failed ? EXIT_FAILURE : EXIT_SUCCESS;
+    return recording_failed || screenshot_failed ? EXIT_FAILURE : EXIT_SUCCESS;
 }
