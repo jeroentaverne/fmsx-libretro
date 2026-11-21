@@ -678,6 +678,15 @@ static void show_message(const char* msg, unsigned number_of_frames)
 
 static void update_fps(void)
 {
+#ifdef MSXPICO_FMSX
+   /* The Pico VDP executes 262 scanlines at 60Hz. Keep its Z80 scheduler,
+    * frontend callbacks and audio duration locked to that same rate. */
+   video_mode_dynamic = false;
+   Mode &= ~MSX_PAL;
+   VDP[9] &= (uint8_t)~0x02;
+   VPeriod = VPERIOD_NTSC/6;
+   fps = 60;
+#else
    int freq;
 
    if (video_mode_dynamic)
@@ -696,6 +705,7 @@ static void update_fps(void)
    }
 
    fps = VIDEO(MSX_PAL) ? 50 : 60;
+#endif
 }
 
 static void cleanup_sram(void)
@@ -760,6 +770,12 @@ static void check_variables(void)
       ModeVRAM = 8;
    }
 
+#ifdef MSXPICO_FMSX
+   /* No PAL/Dynamic for the fixed-frequency Pico VDP. */
+   Mode &= ~MSX_PAL;
+   video_mode_dynamic = false;
+   fps = 60;
+#else
    var.key = "fmsx_video_mode";
    var.value = NULL;
 
@@ -783,6 +799,8 @@ static void check_variables(void)
    {
       Mode |= MSX_NTSC;
    }
+
+#endif
 
    var.key = "fmsx_hires";
    var.value = NULL;
@@ -1063,12 +1081,14 @@ static bool try_loading_palette(const char *path, const char *ext)
    return PaletteFrozen;
 }
 
+#ifndef MSXPICO_FMSX
 static void toggle_frequency(void)
 {
    VDP[9] = VDP[9] ^ 0x02;
    WrZ80(0xFFE8, RdZ80(0xFFE8) ^ 0x02);
    update_fps();
 }
+#endif
 
 static void load_core_specific_cheats(const char* path)
 {
@@ -1147,7 +1167,9 @@ RETRO_CALLCONV void keyboard_event(bool down, unsigned keycode, uint32_t charact
          break;
 
       case RETROK_F8:
+         #ifndef MSXPICO_FMSX
          if (video_mode_dynamic) toggle_frequency();
+#endif
          break;
 
       case RETROK_1:
@@ -1533,7 +1555,9 @@ void retro_set_environment(retro_environment_t cb)
    char* r3_value = custom_keyboard_values("Custom keyboard RetroPad r3; ",         custom_keyboard_fmsx_to_name(keybemu1_map[15].fmsx));
    const struct retro_variable vars[] = {
       { "fmsx_mode", "MSX Mode; MSX2+|MSX1|MSX2" },
+#ifndef MSXPICO_FMSX
       { "fmsx_video_mode", "MSX Video Mode; NTSC|PAL|Dynamic" },
+#endif
       { "fmsx_hires", "Support high resolution; Off|Interlaced|Progressive" },
       { "fmsx_overscan", "Support overscan; No|Yes" },
       { "fmsx_mapper_type_mode", "MSX Mapper Type Mode; "
