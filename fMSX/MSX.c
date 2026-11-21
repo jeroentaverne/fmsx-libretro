@@ -767,13 +767,31 @@ int ResetMSX(int NewMode,int NewRAMPages,int NewVRAMPages)
         else
         {
           FreeMemory(MemMap[0][0][0]);
+#ifdef MSXPICO_FMSX
+          /* The Philips NMS8250/8280 MSX2+ has the SUB-ROM in
+           * expanded slot 3-0, unlike fMSX's generic slot 3-1.
+           * Use the actual hardware layout during the first BIOS scan. */
+          FreeMemory(MemMap[3][0][0]);
+#else
           FreeMemory(MemMap[3][1][0]);
+#endif
           MemMap[0][0][0]=P1;
           MemMap[0][0][1]=P1+0x2000;
           MemMap[0][0][2]=P1+0x4000;
           MemMap[0][0][3]=P1+0x6000;
+#ifdef MSXPICO_FMSX
+          MemMap[3][0][0]=P2;
+          MemMap[3][0][1]=P2+0x2000;
+          MemMap[3][0][2]=P2;
+          MemMap[3][0][3]=P2+0x2000;
+          MemMap[3][0][4]=P2;
+          MemMap[3][0][5]=P2+0x2000;
+          MemMap[3][0][6]=P2;
+          MemMap[3][0][7]=P2+0x2000;
+#else
           MemMap[3][1][0]=P2;
           MemMap[3][1][1]=P2+0x2000;
+#endif
         }
         break;
 
@@ -816,9 +834,17 @@ int ResetMSX(int NewMode,int NewRAMPages,int NewVRAMPages)
     else
     {
       /* Assign new DiskROM */
+#ifdef MSXPICO_FMSX
+      /* Philips NMS8250 disk ROM: slot 3-3, pages 1/2 only.
+       * This maps the existing DISK.ROM unchanged. */
+      FreeMemory(MemMap[3][3][2]);
+      MemMap[3][3][2]=P1;
+      MemMap[3][3][3]=P1+0x2000;
+#else
       FreeMemory(MemMap[3][1][2]);
       MemMap[3][1][2]=P1;
       MemMap[3][1][3]=P1+0x2000;
+#endif
 
       /* If BDOS patching requested... */
       if(NewMode&MSX_PATCHBDOS)
@@ -999,7 +1025,12 @@ uint8_t RdZ80(uint16_t address)
     return (uint8_t)~SSLReg[primarySlot];
 
   /* Disk-ROM memory-mapped FDC. */
-  if ((primarySlot == 3) && (secondarySlot == 1))
+  if ((primarySlot == 3) &&
+#ifdef MSXPICO_FMSX
+      (secondarySlot == 3))
+#else
+      (secondarySlot == 1))
+#endif
   {
     switch (address)
     {
@@ -1042,7 +1073,12 @@ void WrZ80(uint16_t address, uint8_t value)
 
   /* Memory-mapped floppy-disk controller. */
   if (((address & 0x3F88) == 0x3F88) &&
-      (PSL[page] == 3) && (SSL[page] == 1))
+      (PSL[page] == 3) &&
+#ifdef MSXPICO_FMSX
+      (SSL[page] == 3))
+#else
+      (SSL[page] == 1))
+#endif
   {
     switch (address)
     {
