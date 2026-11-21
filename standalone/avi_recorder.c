@@ -2,7 +2,7 @@
  *
  * Each libretro callback yields exactly one encoded frame; the code never
  * drops or coalesces frames. A NULL image is a repeat of the preceding one.
- * The fixed 544x480 canvas accommodates both 272x228 and 544x228 TEXT80,
+ * The fixed 640x480 canvas accommodates all MSX2+ modes including TEXT80,
  * plus high-resolution and PAL modes, using pixel-exact 2x nearest-neighbor
  * replication and centered black margins. No intermediate lossy format.
  *
