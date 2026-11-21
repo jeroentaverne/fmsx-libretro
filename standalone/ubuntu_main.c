@@ -148,7 +148,7 @@ static void update_title(void)
     const int hz = core.cpu_frequency_hz ? core.cpu_frequency_hz() : 3579545;
     char title[128];
     snprintf(title, sizeof title, "fMSX %s / MSX Pico - Z80 %.2f MHz%s",
-             use_nms8245() ? "Philips NMS8245 MSX2" : "MSX2+",
+             use_nms8245() ? "Philips NMS8245 MSX2" : "Philips NMS8250 MSX2",
              (double)hz / 1000000.0, recorder.active ? " [REC MP4 + WAV]" : "");
     SDL_SetWindowTitle(window, title);
 }
@@ -168,7 +168,7 @@ static bool environment(unsigned cmd, void *data)
         keyboard_callback = *(const struct retro_keyboard_callback *)data;
         return true;
     case RETRO_ENVIRONMENT_GET_VARIABLE:
-        if (!data || !use_nms8245()) return false;
+        if (!data) return false;
         {
             struct retro_variable *v = (struct retro_variable *)data;
             if (!v->key) return false;
@@ -667,7 +667,7 @@ int main(int argc, char **argv)
         fprintf(stderr, "SDL initialization: %s\n", SDL_GetError());
         return EXIT_FAILURE;
     }
-    window = SDL_CreateWindow("fMSX MSX2+ / MSX Pico - Z80 3.58 MHz",
+    window = SDL_CreateWindow("fMSX Philips NMS8250 MSX2 / MSX Pico - Z80 3.58 MHz",
                               SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
                               1024, 768, SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
     if (!window)
@@ -678,7 +678,7 @@ int main(int argc, char **argv)
     }
     if (self_test_window)
     {
-        SDL_SetWindowTitle(window, "fMSX MSX2+ / MSX Pico - Z80 8.00 MHz");
+        SDL_SetWindowTitle(window, "fMSX Philips NMS8250 MSX2 / MSX Pico - Z80 8.00 MHz");
         if (!strstr(SDL_GetWindowTitle(window), "8.00 MHz"))
             return EXIT_FAILURE;
         SDL_DestroyWindow(window);
