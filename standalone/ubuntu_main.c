@@ -415,11 +415,14 @@ static void load_fmsx(void *library)
 static void usage(const char *exe)
 {
     printf("Usage: %s [--core fmsx_libretro.so] [--bios BIOS_DIR] [--disk DISK.DSK]\n"
+           "       [--record VIDEO.avi] [--frames N]\n"
            "       %s --self-test-window\n"
-           "Ubuntu / WSLg SDL2 standalone MSX2+ simulator; no RetroArch needed.\n"
-           "Close the window to quit. Alt+Enter toggles fullscreen.\n"
-           "MSX Pico: set MSXPICO_SIM_MAPPER=nextor, MSXPICO_SIM_ROM=..., \n"
-           "          and MSXPICO_SIM_SD=/path/to/raw_sd_image.img.\n",exe,exe);
+           "Ubuntu / WSLg standalone SDL2 MSX2+ emulator, without RetroArch.\n"
+           "Alt+Enter: fullscreen. Ctrl+Shift+R: toggle lossless FFV1 AVI capture.\n"
+           "AVI recording requires ffmpeg: sudo apt install ffmpeg\n"
+           "MSX Pico: MSXPICO_SIM_MAPPER=nextor, MSXPICO_SIM_ROM=...,\n"
+           "          MSXPICO_SIM_SD=/path/to/raw_sd_image.img.\n",
+           exe, exe);
 }
 
 int main(int argc, char **argv)
@@ -436,6 +439,33 @@ int main(int argc, char **argv)
             return EXIT_SUCCESS;
         }
         if (!strcmp(argv[i], "--self-test-window")) { self_test_window = true; continue; }
+        if (!strcmp(argv[i], "--record") && i + 1 < argc)
+        {
+            const char *value = argv[++i];
+            const size_t n = strlen(value);
+            if (n < 5 || n >= sizeof recorder_path ||
+                strcmp(value + n - 4, ".avi"))
+            {
+                fputs("AVI: --record requires a .avi output path\n", stderr);
+                return EXIT_FAILURE;
+            }
+            strcpy(recorder_path, value);
+            auto_record = true;
+            continue;
+        }
+        if (!strcmp(argv[i], "--frames") && i + 1 < argc)
+        {
+            const char *number = argv[++i];
+            char *endptr;
+            unsigned long long limit = strtoull(number, &endptr, 10);
+            if (!number[0] || *endptr || !limit || limit > 1000000000ull)
+            {
+                fputs("Invalid --frames value\n", stderr);
+                return EXIT_FAILURE;
+            }
+            frame_limit = (uint64_t)limit;
+            continue;
+        }
         if ((!strcmp(argv[i], "--core") || !strcmp(argv[i], "--bios") ||
              !strcmp(argv[i], "--disk")) && i + 1 < argc)
         {
@@ -532,6 +562,13 @@ int main(int argc, char **argv)
     struct retro_system_av_info av = {0};
     core.get_system_av_info(&av);
     const double fps = av.timing.fps > 0 ? av.timing.fps : 60.0;
+    recorder_fps = fps <= 55.0 ? 50 : 60;
+    bool recording_failed = false;
+    if (auto_record && !start_recording())
+    {
+        recording_failed = true;
+        quitting = true;
+    }
     const uint64_t counter_frequency = SDL_GetPerformanceFrequency();
     const uint64_t period_ticks = (uint64_t)((double)counter_frequency / fps);
     uint64_t next_frame = SDL_GetPerformanceCounter();
@@ -540,6 +577,8 @@ int main(int argc, char **argv)
     {
         handle_events();
         core.run();
+        ++frames_executed;
+        if (frame_limit && frames_executed >= frame_limit) quitting = true;
         const int hz = core.cpu_frequency_hz ? core.cpu_frequency_hz() : 3579545;
         if (hz != title_hz)
         {
@@ -556,6 +595,7 @@ int main(int argc, char **argv)
         else if (now - next_frame > period_ticks * 2)
             next_frame = now; /* discard missed frames instead of catching up */
     }
+    if (recorder.active && !stop_recording()) recording_failed = true;
     core.unload_game();
     core.deinit();
     dlclose(library);
@@ -564,5 +604,5 @@ int main(int argc, char **argv)
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
     SDL_Quit();
-    return EXIT_SUCCESS;
+    return recording_failed ? EXIT_FAILURE : EXIT_SUCCESS;
 }
