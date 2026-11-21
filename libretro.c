@@ -923,6 +923,8 @@ static void check_variables(void)
          RAMPages = 16;
       else if (strcmp(var.value, "512KB") == 0)
          RAMPages = 32;
+      else if (strcmp(var.value, "2MB") == 0)
+         RAMPages = 128;
       else if (strcmp(var.value, "4MB") == 0)
          RAMPages = 256;
    }
@@ -1572,7 +1574,7 @@ void retro_set_environment(retro_environment_t cb)
             "GameMaster2|"
             "FMPAC"
       },
-      { "fmsx_ram_pages", "MSX Main Memory; Auto|64KB|128KB|256KB|512KB|4MB" },
+      { "fmsx_ram_pages", "MSX Main Memory; Auto|64KB|128KB|256KB|512KB|2MB|4MB" },
       { "fmsx_vram_pages", "MSX Video Memory; Auto|32KB|64KB|128KB|192KB" },
       { "fmsx_scci_megaram", "Enable SCC-I 128kB MegaRAM; Yes|No" },
       { "fmsx_ym2413_core", "YM2413 (FM-PAC / MSX-MUSIC) core; fMSX|NukeYKT" },
