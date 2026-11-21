@@ -1230,6 +1230,12 @@ void OutZ80(uint16_t Port,uint8_t Value)
   uint8_t I,J;
 
   Port&=0xFF;
+#ifdef MSXPICO_FMSX
+  /* Forward PSG/OPLL data to Pico, but retain native fMSX I/O register
+   * state and PSG joystick reads. Pico audio works with cartridge I/O off. */
+  if(Port==0xA0 || Port==0xA1 || Port==0x7C || Port==0x7D)
+    msxpico_fmsx_audio_io_write((uint8_t)Port,Value);
+#endif
   switch(Port)
   {
 case 0x7C:
