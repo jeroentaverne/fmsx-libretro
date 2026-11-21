@@ -19,6 +19,9 @@
 #endif
 
 #include "MSX.h"
+#ifdef MSXPICO_FMSX
+#include "msxpico_fmsx_adapter.h"
+#endif
 #include "EMULib.h"
 #include "Sound.h"
 #include "FDIDisk.h"
@@ -1290,6 +1293,12 @@ bool retro_load_game(const struct retro_game_info *info)
    InitSound(SND_RATE);
    SetChannels(255/MAXCHANNELS, (1<<MAXCHANNELS)-1);
 
+#ifdef MSXPICO_FMSX
+   /* Attach the slot-1 memory cartridge before the BIOS scans ROM headers.
+    * Native fMSX I/O (VDP/PSG/PPI/FDC) is untouched; no Pico I/O forwarding. */
+   if (getenv("MSXPICO_SIM_ROM") && !msxpico_fmsx_attach_from_env())
+      return false;
+#endif
    StartMSX(Mode,RAMPages,VRAMPages);
    if (!have_image && phantom_disk)
    {
@@ -1424,6 +1433,9 @@ void retro_unload_game(void)
    cleanup_sram();
    num_disk_images = 0;
 
+#ifdef MSXPICO_FMSX
+   msxpico_fmsx_stop();
+#endif
    TrashMSX();
 }
 
