@@ -174,3 +174,58 @@ bool avi_recorder_stop(avi_recorder_t *rec)
             ok ? "saved" : "FAILED", (unsigned long long)frames, rec->fps);
     return ok;
 }
+
+/* After capture, stream-copy FFV1 video while muxing the already finalized
+ * WAV as uncompressed PCM. This retains every video frame and every audio
+ * sample, without risking deadlock between two simultaneous FFmpeg pipes.
+ * The standalone WAV is intentionally retained. */
+bool avi_recorder_mux_audio(const char *video_only, const char *wav,
+                            const char *output)
+{
+    if (!video_only || !*video_only || !wav || !*wav ||
+        !output || !*output || !strcmp(video_only, output) ||
+        !strcmp(wav, output) || access(video_only, R_OK) ||
+        access(wav, R_OK) || access(output, F_OK) == 0)
+        return false;
+
+    const pid_t child = fork();
+    if (child < 0)
+    {
+        perror("AVI audio mux fork");
+        return false;
+    }
+    if (!child)
+    {
+        /* -c:v copy ensures the FFV1 bitstream is completely unmodified.
+         * -c:a pcm_s16le embeds exactly the WAV's PCM samples. Do NOT
+         * specify -shortest: it could truncate a video frame or audio tail. */
+        char *const args[] = {
+            "ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin",
+            "-n", "-i", (char *)video_only, "-i", (char *)wav,
+            "-map", "0:v:0", "-map", "1:a:0",
+            "-c:v", "copy", "-c:a", "pcm_s16le",
+            "-f", "avi", (char *)output, NULL
+        };
+        execvp(args[0], args);
+        perror("ffmpeg AVI audio mux");
+        _exit(127);
+    }
+    int status = 0;
+    pid_t waited;
+    do waited = waitpid(child, &status, 0);
+    while (waited < 0 && errno == EINTR);
+    const bool ok = waited == child && WIFEXITED(status) &&
+                    WEXITSTATUS(status) == 0;
+    if (!ok)
+    {
+        /* A failed ffmpeg may leave a partial output. We verified the
+         * filename was absent before spawning, so it is safe to remove. */
+        (void)unlink(output);
+        fprintf(stderr, "AVI: FAILED to mux WAV audio; keeping %s and %s\n",
+                video_only, wav);
+        return false;
+    }
+    fprintf(stderr, "AVI: video + WAV audio muxed without re-encoding video: %s\n",
+            output);
+    return true;
+}
