@@ -352,6 +352,14 @@ uint16_t fmsx_z80_pc(void)
 {
     return CPU.PC.W;
 }
+uint16_t fmsx_z80_bc(void)
+{
+    return CPU.BC.W;
+}
+uint16_t fmsx_z80_sp(void)
+{
+    return CPU.SP.W;
+}
 
 static int scale_z80_cycles(int base)
 {
