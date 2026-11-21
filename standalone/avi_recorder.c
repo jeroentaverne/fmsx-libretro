@@ -1,7 +1,8 @@
 /* Native AVI recorder: RGB565 -> fixed-size RGB565 -> FFV1/AVI.
  *
- * Each libretro callback yields exactly one encoded frame; the code never
- * drops or coalesces frames. A NULL image is a repeat of the preceding one.
+ * Default output is one FFV1 video image for every two 50/60 Hz MSX
+ * frames (25/30 fps), with an opt-in full 50/60 fps mode. A NULL image
+ * is a duplicate of the preceding one; audio is never decimated.
  * The fixed 640x480 canvas accommodates all MSX2+ modes including TEXT80,
  * plus high-resolution and PAL modes, using pixel-exact 2x nearest-neighbor
  * replication and centered black margins. No intermediate lossy format.
@@ -33,10 +34,12 @@ static bool write_all(int fd, const uint8_t *ptr, size_t n)
 }
 
 bool avi_recorder_start(avi_recorder_t *rec, const char *filename,
-                        unsigned fps)
+                        unsigned source_fps, unsigned output_fps)
 {
     if (!rec || rec->active || !filename || !*filename ||
-        (fps != 50 && fps != 60)) return false;
+        (source_fps != 50 && source_fps != 60) ||
+        (output_fps != source_fps && output_fps != source_fps / 2))
+        return false;
     /* Do not silently overwrite users' previous recordings. */
     if (access(filename, F_OK) == 0)
     {
@@ -55,7 +58,7 @@ bool avi_recorder_start(avi_recorder_t *rec, const char *filename,
     }
     char size[32], rate[16];
     snprintf(size, sizeof size, "%ux%u", AVI_WIDTH, AVI_HEIGHT);
-    snprintf(rate, sizeof rate, "%u", fps);
+    snprintf(rate, sizeof rate, "%u", output_fps);
     pid_t child = fork();
     if (child < 0)
     {
@@ -92,12 +95,15 @@ bool avi_recorder_start(avi_recorder_t *rec, const char *filename,
     rec->pipe_fd = pipe_fds[1];
     rec->encoder_pid = child;
     rec->canvas = pixels;
-    rec->fps = fps;
+    rec->fps = output_fps;
+    rec->source_fps = source_fps;
+    rec->decimation = source_fps / output_fps;
     rec->frames_written = 0;
+    rec->input_frames = 0;
     rec->have_frame = false;
     rec->active = true;
     fprintf(stderr, "AVI: recording %s (%ux%u %u fps, FFV1 lossless)\n",
-            filename, AVI_WIDTH, AVI_HEIGHT, fps);
+            filename, AVI_WIDTH, AVI_HEIGHT, output_fps);
     return true;
 }
 
@@ -105,6 +111,10 @@ bool avi_recorder_frame(avi_recorder_t *rec, const void *rgb565,
                         unsigned w, unsigned h, size_t pitch)
 {
     if (!rec || !rec->active) return false;
+    /* Preserve temporal spacing: every second guest frame at 25/30 Hz,
+     * while retaining every guest frame for the 50/60 Hz option. */
+    if ((rec->input_frames++ % rec->decimation) != 0)
+        return true;
     if (rgb565)
     {
         if (!w || !h || w > AVI_WIDTH || h > AVI_HEIGHT ||
