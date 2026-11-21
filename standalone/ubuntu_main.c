@@ -10,6 +10,7 @@
 #include "libretro.h"
 #include "avi_recorder.h"
 #include "png_screenshot.h"
+#include "wav_recorder.h"
 #include <SDL2/SDL.h>
 #include <dlfcn.h>
 #include <stdbool.h>
@@ -46,6 +47,9 @@ static bool key_states[RETROK_LAST];
 static bool quitting;
 static fmsx_core_t core;
 static avi_recorder_t recorder;
+static wav_recorder_t audio_capture;
+static unsigned recorder_sample_rate = 48000;
+static bool media_capture_failed;
 static unsigned recorder_fps = 60;
 static char recorder_path[4096];
 static unsigned recorder_sequence;
@@ -128,7 +132,7 @@ static void update_title(void)
     const int hz = core.cpu_frequency_hz ? core.cpu_frequency_hz() : 3579545;
     char title[128];
     snprintf(title, sizeof title, "fMSX MSX2+ / MSX Pico - Z80 %.2f MHz%s",
-             (double)hz / 1000000.0, recorder.active ? " [REC FFV1 AVI]" : "");
+             (double)hz / 1000000.0, recorder.active ? " [REC FFV1 AVI + WAV]" : "");
     SDL_SetWindowTitle(window, title);
 }
 
@@ -243,6 +247,15 @@ static void video_frame(const void *data, unsigned width,
 
 static size_t audio_samples(const int16_t *samples, size_t frames)
 {
+    /* Capture before SDL latency throttling: never drop recorded audio
+     * even if the host device is muted, disabled, or running behind. */
+    if (audio_capture.active &&
+        !wav_recorder_samples(&audio_capture, samples, frames))
+    {
+        fputs("WAV: write failed; stopping capture\n", stderr);
+        media_capture_failed = true;
+        quitting = true;
+    }
     if (audio_device && samples && frames)
     {
         /* At most ~100 ms of queued audio; don't build unbounded latency. */
@@ -349,13 +362,29 @@ static bool start_recording(void)
     {
         do
         {
-            if (recorder_sequence == 9999) return false;
+            if (recorder_sequence >= 9999) return false;
             ++recorder_sequence;
             snprintf(filename, sizeof filename, "fmsx-capture-%04u.avi",
                      recorder_sequence);
         } while (access(filename, F_OK) == 0);
     }
-    if (!avi_recorder_start(&recorder, filename, recorder_fps)) return false;
+
+    const size_t n = strlen(filename);
+    if (n < 4 || strcmp(filename + n - 4, ".avi")) return false;
+    char wav_path[4096];
+    memcpy(wav_path, filename, n + 1);
+    memcpy(wav_path + n - 4, ".wav", 5);
+
+    /* Audio starts alongside video, not at SDL's playback queue. If
+     * either output cannot start, do not silently create video-only AVI. */
+    if (!wav_recorder_start(&audio_capture, wav_path, recorder_sample_rate))
+        return false;
+    if (!avi_recorder_start(&recorder, filename, recorder_fps))
+    {
+        (void)wav_recorder_stop(&audio_capture);
+        (void)unlink(wav_path);  /* WAV file was created exclusively here. */
+        return false;
+    }
     if (recorder_path[0]) ++recorder_sequence;
     update_title();
     return true;
@@ -363,22 +392,12 @@ static bool start_recording(void)
 
 static bool stop_recording(void)
 {
-    const bool ok = !recorder.active || avi_recorder_stop(&recorder);
+    /* Both outputs always get finalized, even if the other fails. */
+    const bool video = !recorder.active || avi_recorder_stop(&recorder);
+    const bool audio = !audio_capture.active ||
+                       wav_recorder_stop(&audio_capture);
     update_title();
-    return ok;
-}
-
-/* Inject genuine SDL keyboard events to exercise the exact same shortcut
- * path as an interactive desktop session. This mode is test-only. */
-static bool inject_capture_key(SDL_Keycode key)
-{
-    SDL_Event event = {0};
-    event.type = SDL_KEYDOWN;
-    event.key.state = SDL_PRESSED;
-    event.key.repeat = 0;
-    event.key.keysym.sym = key;
-    event.key.keysym.mod = KMOD_CTRL | KMOD_SHIFT;
-    return SDL_PushEvent(&event) == 1;
+    return video && audio;
 }
 
 static void handle_events(void)
@@ -475,7 +494,7 @@ static void usage(const char *exe)
            "       %s --self-test-window\n"
            "Ubuntu / WSLg standalone SDL2 MSX2+ emulator, without RetroArch.\n"
            "Alt+Enter: fullscreen. Ctrl+Shift+R: FFV1 AVI, Ctrl+Shift+S: PNG.\n"
-           "AVI recording requires ffmpeg: sudo apt install ffmpeg\n"
+           "AVI video requires ffmpeg; WAV audio saves alongside each AVI.\n"
            "MSX Pico: MSXPICO_SIM_MAPPER=nextor, MSXPICO_SIM_ROM=...,\n"
            "          MSXPICO_SIM_SD=/path/to/raw_sd_image.img.\n",
            exe, exe);
@@ -634,6 +653,9 @@ int main(int argc, char **argv)
     core.get_system_av_info(&av);
     const double fps = av.timing.fps > 0 ? av.timing.fps : 60.0;
     recorder_fps = fps <= 55.0 ? 50 : 60;
+    recorder_sample_rate = (unsigned)(av.timing.sample_rate + 0.5);
+    if (recorder_sample_rate < 8000 || recorder_sample_rate > 192000)
+        recorder_sample_rate = 48000;
     bool recording_failed = false;
     if (self_test_shortcuts)
     {
@@ -663,7 +685,7 @@ int main(int argc, char **argv)
     int title_hz = -1;
     while (!quitting)
     {
-        /* Two PNG snapshots and a 15-frame AVI via the real keyboard hotkeys. */
+        /* Two PNG snapshots and matching AVI/WAV via SDL hotkeys. */
         if (self_test_shortcuts)
         {
             if (frames_executed == 6 || frames_executed == 16)
@@ -695,7 +717,8 @@ int main(int argc, char **argv)
         else if (now - next_frame > period_ticks * 2)
             next_frame = now; /* discard missed frames instead of catching up */
     }
-    if (recorder.active && !stop_recording()) recording_failed = true;
+    if ((recorder.active || audio_capture.active) && !stop_recording()) recording_failed = true;
+    if (media_capture_failed) recording_failed = true;
     if (self_test_shortcuts)
     {
         const bool ok = screenshot_sequence == 2 &&
@@ -703,9 +726,10 @@ int main(int argc, char **argv)
                         access("fmsx-screenshot-0001.png", R_OK) == 0 &&
                         access("fmsx-screenshot-0002.png", R_OK) == 0 &&
                         access("fmsx-capture-0001.avi", R_OK) == 0 &&
+                        access("fmsx-capture-0001.wav", R_OK) == 0 &&
                         !recording_failed && !screenshot_failed;
         if (!ok) recording_failed = true;
-        fprintf(stderr, "%s: SDL keyboard shortcuts (2 PNG + 15 AVI frames)\\n",
+        fprintf(stderr, "%s: SDL keyboard shortcuts (2 PNG + AVI + WAV)\n",
                 ok ? "PASS" : "FAIL");
     }
     core.unload_game();
