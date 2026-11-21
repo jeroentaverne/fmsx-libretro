@@ -551,7 +551,7 @@ static void usage(const char *exe)
            "Alt+Enter: fullscreen. Ctrl+Shift+R: FFV1 AVI, Ctrl+Shift+S: PNG.\n"
            "AVI defaults to 25/30 fps; --record-full-rate keeps 50/60 fps.\n"
            "AVI video requires ffmpeg; WAV audio saves alongside each AVI.\n"
-           "--auto-aleste: type ALESTE then Enter at 1-second intervals,\n"
+           "--auto-aleste: press A, Enter, Enter at 1-second intervals,\n"
            "               record 60 seconds of emulated video and audio.\n"
            "MSX Pico: MSXPICO_SIM_MAPPER=nextor, MSXPICO_SIM_ROM=...,\n"
            "          MSXPICO_SIM_SD=/path/to/raw_sd_image.img.\n",
@@ -771,21 +771,20 @@ int main(int argc, char **argv)
         handle_events();
         /*
          * Advance using emulated frame count rather than host wall time.
-         * Give the firmware menu five seconds to appear, then search by
-         * typing ALESTE and press Enter. A key is held for 100 ms and each
-         * next key starts one second later. Recording begins after Enter.
+         * Give the firmware menu five seconds to appear, then send A,
+         * Enter, Enter in that order. Each key is held for 100 ms;
+         * subsequent keys begin one second apart. Record after last Enter.
          */
         if (auto_aleste && !aleste_record_started)
         {
             static const unsigned sequence[] = {
-                RETROK_a, RETROK_l, RETROK_e, RETROK_s,
-                RETROK_t, RETROK_e, RETROK_RETURN
+                RETROK_a, RETROK_RETURN, RETROK_RETURN
             };
             const uint64_t first = (uint64_t)emulator_fps * 5u;
             const uint64_t interval = emulator_fps;
             const uint64_t held = emulator_fps / 10u ?
                                   emulator_fps / 10u : 1u;
-            if (frames_executed >= first && aleste_step < 7u)
+            if (frames_executed >= first && aleste_step < sizeof sequence / sizeof sequence[0])
             {
                 const uint64_t elapsed = frames_executed - first;
                 const uint64_t start = (uint64_t)aleste_step * interval;
@@ -801,7 +800,7 @@ int main(int argc, char **argv)
                     ++aleste_step;
                 }
             }
-            if (aleste_step == 7u && !aleste_key_down)
+            if (aleste_step == sizeof sequence / sizeof sequence[0] && !aleste_key_down)
             {
                 aleste_started_frame = frames_executed;
                 if (!start_recording())
