@@ -7,6 +7,8 @@
            msxpico_fmsx_sd_commands; msxpico_fmsx_sd_reads;
            msxpico_fmsx_sd_command_count;
            msxpico_fmsx_sd_rx_bytes; msxpico_fmsx_sd_pending_bytes;
+           msxpico_fmsx_fatfs_mount; msxpico_fmsx_fatfs_file_size;
+           msxpico_fmsx_fatfs_file_read;
            RAMPages; VRAMPages;
            fmsx_cpu_frequency_hz; fmsx_z80_pc; HPeriod; VPeriod;
            sim_io_write_count; sim_io_last_port; sim_io_last_data;
