@@ -243,7 +243,11 @@ extern uint8_t tape_type;
 #define ScreenON      (VDP[1]&0x40)   /* Show screen         */
 #define SpritesOFF    (VDP[8]&0x02)   /* Don't show sprites  */
 #define SolidColor0   (VDP[8]&0x20)   /* Solid/Tran. COLOR 0 */
+#ifdef MSXPICO_FMSX
+#define PALVideo      0               /* Pico fixed to NTSC 60Hz */
+#else
 #define PALVideo      (VDP[9]&0x02)   /* PAL/NTSC video      */
+#endif
 #define FlipEvenOdd   (VDP[9]&0x04)   /* Flip even/odd pages */
 #define InterlaceON   (VDP[9]&0x08)   /* Interlaced screen   */
 #define ScanLines212  (VDP[9]&0x80)   /* 212/192 scanlines   */
