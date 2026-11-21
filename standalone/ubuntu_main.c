@@ -136,12 +136,19 @@ static void find_bundled_bios(void)
     }
 }
 
+static bool use_nms8245(void)
+{
+    const char *name = getenv("MSXPICO_SIM_MACHINE");
+    return name && strcmp(name, "NMS8245") == 0;
+}
+
 static void update_title(void)
 {
     if (!window) return;
     const int hz = core.cpu_frequency_hz ? core.cpu_frequency_hz() : 3579545;
     char title[128];
-    snprintf(title, sizeof title, "fMSX MSX2+ / MSX Pico - Z80 %.2f MHz%s",
+    snprintf(title, sizeof title, "fMSX %s / MSX Pico - Z80 %.2f MHz%s",
+             use_nms8245() ? "Philips NMS8245 MSX2" : "MSX2+",
              (double)hz / 1000000.0, recorder.active ? " [REC FFV1 AVI + WAV]" : "");
     SDL_SetWindowTitle(window, title);
 }
@@ -160,6 +167,17 @@ static bool environment(unsigned cmd, void *data)
         if (!data) return false;
         keyboard_callback = *(const struct retro_keyboard_callback *)data;
         return true;
+    case RETRO_ENVIRONMENT_GET_VARIABLE:
+        if (!data || !use_nms8245()) return false;
+        {
+            struct retro_variable *v = (struct retro_variable *)data;
+            if (!v->key) return false;
+            if (!strcmp(v->key, "fmsx_mode")) v->value = "MSX2";
+            else if (!strcmp(v->key, "fmsx_video_mode")) v->value = "PAL";
+            else if (!strcmp(v->key, "fmsx_ram_pages")) v->value = "128KB";
+            else return false;
+            return true;
+        }
     case RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE:
         if (!data) return false;
         *(bool *)data = false;
