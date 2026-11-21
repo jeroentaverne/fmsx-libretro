@@ -288,6 +288,48 @@ static unsigned map_key(SDL_Keycode code)
     }
 }
 
+/* Ctrl+Shift+R toggles recording without injecting a key into the MSX.
+ * Subsequent recording sessions use distinct filenames, never overwrite. */
+static bool start_recording(void)
+{
+    char filename[4096];
+    if (recorder_path[0])
+    {
+        if (!recorder_sequence)
+            strcpy(filename, recorder_path);
+        else
+        {
+            const size_t n = strlen(recorder_path);
+            const bool avi = n >= 4 && !strcmp(recorder_path + n - 4, ".avi");
+            const int result = snprintf(filename, sizeof filename,
+                "%.*s-%04u.avi", (int)(avi ? n - 4 : n),
+                recorder_path, recorder_sequence);
+            if (result < 0 || result >= (int)sizeof filename) return false;
+        }
+    }
+    else
+    {
+        do
+        {
+            if (recorder_sequence == 9999) return false;
+            ++recorder_sequence;
+            snprintf(filename, sizeof filename, "fmsx-capture-%04u.avi",
+                     recorder_sequence);
+        } while (access(filename, F_OK) == 0);
+    }
+    if (!avi_recorder_start(&recorder, filename, recorder_fps)) return false;
+    if (recorder_path[0]) ++recorder_sequence;
+    update_title();
+    return true;
+}
+
+static bool stop_recording(void)
+{
+    const bool ok = !recorder.active || avi_recorder_stop(&recorder);
+    update_title();
+    return ok;
+}
+
 static void handle_events(void)
 {
     SDL_Event event;
@@ -305,6 +347,19 @@ static void handle_events(void)
         const bool down = event.type == SDL_KEYDOWN;
         const SDL_Keycode key = event.key.keysym.sym;
         const SDL_Keymod mods = (SDL_Keymod)event.key.keysym.mod;
+        if (key == SDLK_r && (mods & KMOD_CTRL) && (mods & KMOD_SHIFT))
+        {
+            if (down && !event.key.repeat)
+            {
+                if (recorder.active)
+                {
+                    if (!stop_recording()) fputs("AVI: recorder failed\n", stderr);
+                }
+                else if (!start_recording())
+                    fputs("AVI: cannot start recording\n", stderr);
+            }
+            continue;
+        }
         if (down && key == SDLK_RETURN && (mods & KMOD_ALT))
         {
             SDL_SetWindowFullscreen(window,
