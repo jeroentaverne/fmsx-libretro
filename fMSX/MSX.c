@@ -819,6 +819,10 @@ int ResetMSX(int NewMode,int NewRAMPages,int NewVRAMPages)
     }
   }
 
+  /* The MSX Pico VDP uses 262 NTSC scanlines at 60Hz. */
+#ifdef MSXPICO_FMSX
+  NewMode &= ~MSX_PAL;
+#endif
   /* Assign new modes */
   Mode           = NewMode;
 
@@ -923,6 +927,9 @@ int ResetMSX(int NewMode,int NewRAMPages,int NewVRAMPages)
 
   /* Reset VDP */
   memcpy(VDP,VDPInit,sizeof(VDP));
+#ifdef MSXPICO_FMSX
+  VDP[9] &= (uint8_t)~0x02;
+#endif
   memcpy(VDPStatus,VDPSInit,sizeof(VDPStatus));
 
   /* Reset keyboard */
@@ -1886,6 +1893,11 @@ void SetMegaROM(int Slot,uint8_t P0,uint8_t P1,uint8_t P2,uint8_t P3)
 void VDPOut(uint8_t R,uint8_t V)
 {
   uint8_t J;
+
+#ifdef MSXPICO_FMSX
+  /* R#9 bit 1 cannot select PAL: preserve all other VDP mode bits. */
+  if(R==9) V&=(uint8_t)~0x02;
+#endif
 
   switch(R)
   {
@@ -3394,6 +3406,11 @@ unsigned int LoadState(unsigned char *Buf,unsigned int MaxSize)
   LoadSTRUCT(CPU);
   LoadSTRUCT(PPI);
   LoadSTRUCT(VDP);
+#ifdef MSXPICO_FMSX
+  VDP[9] &= (uint8_t)~0x02;
+  Mode &= ~MSX_PAL;
+  VPeriod = VPERIOD_NTSC/6;
+#endif
   LoadARRAY(VDPStatus);
   LoadARRAY(Palette);
   LoadSTRUCT(PSG);
