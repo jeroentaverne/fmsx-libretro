@@ -3531,6 +3531,7 @@ unsigned int LoadState(unsigned char *Buf,unsigned int MaxSize)
 #ifdef MSXPICO_FMSX
 /* Host integration regression probe. Checks actual VDP/CPU mode, not
  * only the framerate advertised to the recording frontend. */
+__attribute__((visibility("default"), used))
 int fmsx_pico_ntsc_locked(void)
 {
   return !(VDP[9] & 0x02) && !(Mode & MSX_PAL)
