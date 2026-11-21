@@ -5,6 +5,7 @@
            msxpico_fmsx_attach_rom; msxpico_fmsx_stop;
            msxpico_fmsx_claim_port; msxpico_fmsx_attached;
            msxpico_fmsx_sd_commands; msxpico_fmsx_sd_reads;
+           msxpico_fmsx_sd_command_count;
            RAMPages; VRAMPages;
            fmsx_cpu_frequency_hz; HPeriod; VPeriod;
            sim_io_write_count; sim_io_last_port; sim_io_last_data;
