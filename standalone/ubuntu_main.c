@@ -8,6 +8,7 @@
  */
 #define _POSIX_C_SOURCE 200809L
 #include "libretro.h"
+#include "avi_recorder.h"
 #include <SDL2/SDL.h>
 #include <dlfcn.h>
 #include <stdbool.h>
@@ -43,6 +44,13 @@ static struct retro_keyboard_callback keyboard_callback;
 static bool key_states[RETROK_LAST];
 static bool quitting;
 static fmsx_core_t core;
+static avi_recorder_t recorder;
+static unsigned recorder_fps = 60;
+static char recorder_path[4096];
+static unsigned recorder_sequence;
+static bool auto_record;
+static uint64_t frame_limit;
+static uint64_t frames_executed;
 
 /* The fork ships its original BIOS files. Locate them relative to the
  * executable, never requiring an external BIOS download or RetroArch. */
@@ -113,8 +121,8 @@ static void update_title(void)
     if (!window) return;
     const int hz = core.cpu_frequency_hz ? core.cpu_frequency_hz() : 3579545;
     char title[128];
-    snprintf(title, sizeof title, "fMSX MSX2+ / MSX Pico - Z80 %.2f MHz",
-             (double)hz / 1000000.0);
+    snprintf(title, sizeof title, "fMSX MSX2+ / MSX Pico - Z80 %.2f MHz%s",
+             (double)hz / 1000000.0, recorder.active ? " [REC FFV1 AVI]" : "");
     SDL_SetWindowTitle(window, title);
 }
 
@@ -159,6 +167,15 @@ static bool environment(unsigned cmd, void *data)
 static void video_frame(const void *data, unsigned width,
                         unsigned height, size_t pitch)
 {
+    /* Feed every emulated video frame to the lossless encoder before SDL
+     * presentation. The pipe blocks instead of dropping delayed frames. */
+    if (recorder.active &&
+        !avi_recorder_frame(&recorder, data, width, height, pitch))
+    {
+        fputs("AVI: encoder failed while writing video frame\n", stderr);
+        quitting = true;
+        return;
+    }
     if (!renderer || !data || !width || !height) return;
     if (!texture || width != texture_width || height != texture_height)
     {
