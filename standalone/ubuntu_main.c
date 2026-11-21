@@ -423,6 +423,19 @@ static bool stop_recording(void)
     return ok;
 }
 
+/* Test the exact SDL shortcut paths without relying on a real keyboard.
+ * No shortcut events are injected in normal emulation sessions. */
+static bool inject_capture_key(SDL_Keycode key)
+{
+    SDL_Event event = {0};
+    event.type = SDL_KEYDOWN;
+    event.key.state = SDL_PRESSED;
+    event.key.repeat = 0;
+    event.key.keysym.sym = key;
+    event.key.keysym.mod = KMOD_CTRL | KMOD_SHIFT;
+    return SDL_PushEvent(&event) == 1;
+}
+
 static void handle_events(void)
 {
     SDL_Event event;
