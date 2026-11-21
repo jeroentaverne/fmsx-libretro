@@ -50,6 +50,7 @@ static unsigned recorder_fps = 60;
 static char recorder_path[4096];
 static unsigned recorder_sequence;
 static bool auto_record;
+static bool self_test_shortcuts;
 static uint64_t frame_limit;
 static uint64_t frames_executed;
 static bool screenshot_requested;
@@ -367,6 +368,19 @@ static bool stop_recording(void)
     return ok;
 }
 
+/* Inject genuine SDL keyboard events to exercise the exact same shortcut
+ * path as an interactive desktop session. This mode is test-only. */
+static bool inject_capture_key(SDL_Keycode key)
+{
+    SDL_Event event = {0};
+    event.type = SDL_KEYDOWN;
+    event.key.state = SDL_PRESSED;
+    event.key.repeat = 0;
+    event.key.keysym.sym = key;
+    event.key.keysym.mod = KMOD_CTRL | KMOD_SHIFT;
+    return SDL_PushEvent(&event) == 1;
+}
+
 static void handle_events(void)
 {
     SDL_Event event;
@@ -457,7 +471,7 @@ static void load_fmsx(void *library)
 static void usage(const char *exe)
 {
     printf("Usage: %s [--core fmsx_libretro.so] [--bios BIOS_DIR] [--disk DISK.DSK]\n"
-           "       [--record VIDEO.avi] [--screenshot SCREEN.png] [--frames N]\n"
+           "       [--record VIDEO.avi] [--screenshot SCREEN.png] [--frames N] [--self-test-shortcuts]\n"
            "       %s --self-test-window\n"
            "Ubuntu / WSLg standalone SDL2 MSX2+ emulator, without RetroArch.\n"
            "Alt+Enter: fullscreen. Ctrl+Shift+R: FFV1 AVI, Ctrl+Shift+S: PNG.\n"
@@ -481,6 +495,7 @@ int main(int argc, char **argv)
             return EXIT_SUCCESS;
         }
         if (!strcmp(argv[i], "--self-test-window")) { self_test_window = true; continue; }
+        if (!strcmp(argv[i], "--self-test-shortcuts")) { self_test_shortcuts = true; continue; }
         if (!strcmp(argv[i], "--screenshot") && i + 1 < argc)
         {
             const char *name = argv[++i];
@@ -620,6 +635,23 @@ int main(int argc, char **argv)
     const double fps = av.timing.fps > 0 ? av.timing.fps : 60.0;
     recorder_fps = fps <= 55.0 ? 50 : 60;
     bool recording_failed = false;
+    if (self_test_shortcuts)
+    {
+        if (auto_record || screenshot_requested)
+        {
+            fputs("Shortcut test cannot combine with --record/--screenshot\\n", stderr);
+            core.unload_game();
+            core.deinit();
+            dlclose(library);
+            return EXIT_FAILURE;
+        }
+        if (!frame_limit) frame_limit = 32;
+        if (frame_limit < 30)
+        {
+            fputs("Shortcut test needs at least 30 frames\\n", stderr);
+            return EXIT_FAILURE;
+        }
+    }
     if (auto_record && !start_recording())
     {
         recording_failed = true;
@@ -631,6 +663,18 @@ int main(int argc, char **argv)
     int title_hz = -1;
     while (!quitting)
     {
+        /* Two PNG snapshots and a 15-frame AVI via the real keyboard hotkeys. */
+        if (self_test_shortcuts)
+        {
+            if (frames_executed == 6 || frames_executed == 16)
+            {
+                if (!inject_capture_key(SDLK_s)) recording_failed = true;
+            }
+            if (frames_executed == 10 || frames_executed == 25)
+            {
+                if (!inject_capture_key(SDLK_r)) recording_failed = true;
+            }
+        }
         handle_events();
         core.run();
         ++frames_executed;
@@ -652,6 +696,18 @@ int main(int argc, char **argv)
             next_frame = now; /* discard missed frames instead of catching up */
     }
     if (recorder.active && !stop_recording()) recording_failed = true;
+    if (self_test_shortcuts)
+    {
+        const bool ok = screenshot_sequence == 2 &&
+                        recorder_sequence == 1 &&
+                        access("fmsx-screenshot-0001.png", R_OK) == 0 &&
+                        access("fmsx-screenshot-0002.png", R_OK) == 0 &&
+                        access("fmsx-capture-0001.avi", R_OK) == 0 &&
+                        !recording_failed && !screenshot_failed;
+        if (!ok) recording_failed = true;
+        fprintf(stderr, "%s: SDL keyboard shortcuts (2 PNG + 15 AVI frames)\\n",
+                ok ? "PASS" : "FAIL");
+    }
     core.unload_game();
     core.deinit();
     dlclose(library);
