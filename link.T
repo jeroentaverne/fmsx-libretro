@@ -10,7 +10,7 @@
            msxpico_fmsx_fatfs_mount; msxpico_fmsx_fatfs_file_size;
            msxpico_fmsx_fatfs_file_read;
            RAMPages; VRAMPages;
-           fmsx_cpu_frequency_hz; fmsx_z80_pc; HPeriod; VPeriod;
+           fmsx_cpu_frequency_hz; fmsx_z80_pc; fmsx_z80_bc; fmsx_z80_sp; HPeriod; VPeriod;
            sim_io_write_count; sim_io_last_port; sim_io_last_data;
    local: *;
 };
