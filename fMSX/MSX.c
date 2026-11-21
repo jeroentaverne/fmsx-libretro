@@ -347,6 +347,12 @@ int fmsx_cpu_frequency_hz(void)
     return panasonic_turbo.enabled ? TURBO_FREQUENCY_HZ : CPU_CLOCK;
 }
 
+/* Diagnostic entry point for host-only boot tracing. */
+uint16_t fmsx_z80_pc(void)
+{
+    return CPU.PC.W;
+}
+
 static int scale_z80_cycles(int base)
 {
     return (int)(((int64_t)base * fmsx_cpu_frequency_hz() + CPU_CLOCK / 2) / CPU_CLOCK);
