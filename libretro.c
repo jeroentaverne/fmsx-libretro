@@ -1225,10 +1225,12 @@ bool retro_load_game(const struct retro_game_info *info)
    for(i = 0; i < 256; i++)
       BPal[i]=PIXEL(((i>>2)&0x07)*255/7,((i>>5)&0x07)*255/7,(i&0x03)*255/3);
 
-   StartMSX(Mode,RAMPages,VRAMPages);
 #ifdef MSXPICO_FMSX
+   /* StartMSX() runs the first Z80 frame. Install the Pico cartridge
+    * BEFORE BIOS slot discovery, otherwise its AB header is missed. */
    (void)msxpico_fmsx_attach_from_env();
 #endif
+   StartMSX(Mode,RAMPages,VRAMPages);
    if (!have_image && phantom_disk)
    {
       if (info && (dot = strrchr(info->path, '.')) && !strcasecmp(dot, ".dsk"))
