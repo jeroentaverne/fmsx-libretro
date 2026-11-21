@@ -18,6 +18,13 @@
 #include "Z80.h"
 #include "Tables.h"
 
+#ifdef MSXPICO_FMSX
+/* Emulated Z80 T-states, independent of SDL/host frame pacing.
+ * Timer peripherals must not use CLOCK_MONOTONIC directly here. */
+static uint64_t msxpico_z80_tstates;
+uint64_t fmsx_z80_cycles(void) { return msxpico_z80_tstates; }
+#endif
+
 /** INLINE ***************************************************/
 /** C99 standard has "inline", but older compilers used     **/
 /** __inline for the same purpose.                          **/
@@ -442,6 +449,9 @@ static void CodesFD(Z80 *R)
 /*************************************************************/
 void ResetZ80(Z80 *R)
 {
+#ifdef MSXPICO_FMSX
+  msxpico_z80_tstates = 0;
+#endif
   R->PC.W     = 0x0000;
   R->SP.W     = 0xF000;
   R->AF.W     = 0x0000;
@@ -607,6 +617,10 @@ uint16_t RunZ80(Z80 *R)
     }
 #endif
 
+#ifdef MSXPICO_FMSX
+    /* Capture the full instruction cost, including extra prefix cycles. */
+    const int tstates_before = R->ICount;
+#endif
     /* Read opcode and count cycles */
     I=OpZ80(R->PC.W++);
     R->ICount-=Cycles[I];
@@ -622,6 +636,12 @@ uint16_t RunZ80(Z80 *R)
       case PFX_FD: CodesFD(R);break;
       case PFX_DD: CodesDD(R);break;
     }
+
+#ifdef MSXPICO_FMSX
+    /* The ICount delta includes cycles charged by nested opcode handlers. */
+    if(tstates_before>R->ICount)
+      msxpico_z80_tstates+=(uint32_t)(tstates_before-R->ICount);
+#endif
 
     /* If cycle counter expired... */
     if(R->ICount<=0)
