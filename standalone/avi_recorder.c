@@ -239,3 +239,46 @@ bool avi_recorder_mux_audio(const char *video_only, const char *wav,
             output);
     return true;
 }
+
+/* MP4 is a browser-friendly preview of the lossless FFV1/PCM master.
+ * Convert only after the AVI finishes; never disturb its timing or content. */
+bool avi_recorder_export_mp4(const char *avi, const char *mp4)
+{
+    if (!avi || !*avi || !mp4 || !*mp4 || !strcmp(avi, mp4) ||
+        access(avi, R_OK) != 0 || access(mp4, F_OK) == 0)
+        return false;
+    const pid_t child = fork();
+    if (child < 0)
+    {
+        perror("MP4 fork");
+        return false;
+    }
+    if (!child)
+    {
+        char *const args[] = {
+            "ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin",
+            "-n", "-i", (char *)avi, "-map", "0:v:0", "-map", "0:a:0",
+            "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
+            "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k",
+            "-movflags", "+faststart", "-f", "mp4", (char *)mp4, NULL
+        };
+        execvp(args[0], args);
+        perror("ffmpeg MP4 export");
+        _exit(127);
+    }
+    int status = 0;
+    pid_t waited;
+    do waited = waitpid(child, &status, 0);
+    while (waited < 0 && errno == EINTR);
+    const bool ok = waited == child && WIFEXITED(status) &&
+                    WEXITSTATUS(status) == 0;
+    if (!ok)
+    {
+        /* This output did not exist before export; remove incomplete data. */
+        (void)unlink(mp4);
+        fprintf(stderr, "MP4: export FAILED; original AVI retained: %s\n", avi);
+        return false;
+    }
+    fprintf(stderr, "MP4: H.264/AAC preview saved: %s\n", mp4);
+    return true;
+}
